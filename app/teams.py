@@ -52,40 +52,14 @@ def team_page(team_name):
         pass
 
     # fallback to sqlite
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute(
-        'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione FROM giocatori WHERE FantaSquadra = ? AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)',
-        (team_name,),
-    )
-    rows = cur.fetchall()
-    conn.close()
-    for row in rows:
-        codice = (row['ruolo'] or '').strip()
-        key = None
-        if codice:
-            ch = codice[0].upper()
-            key = ruolo_map.get(ch)
-        if not key:
-            continue
-        team_roster[key].append({
-            'id': row['id'],
-            'nome': row['nome'],
-            'ruolo': codice,
-            'squadra_reale': row['squadra_reale'],
-            'costo': row['costo'],
-            'anni_contratto': row['anni_contratto'],
-            'opzione': row['opzione'],
-        })
-    # compute basic cassa
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute('SELECT cassa_iniziale FROM fantateam WHERE squadra=?', (team_name,))
-    tr = cur.fetchone()
-    starting_pot = float(tr[0]) if tr and tr[0] is not None else 300.0
-    total_spent = sum([float(r['costo']) for r in rows if r['costo'] not in (None, '')])
-    cassa = starting_pot - total_spent
-    conn.close()
-    return render_template('team.html', tname=team_name, roster=team_roster, rose_structure=current_app.config.get('ROSE_STRUCTURE', {}), starting_pot=starting_pot, total_spent=total_spent, cassa=cassa, squadre=[])
+    # fallback to sqlite via MarketService helper
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        svc = MarketService()
+        team_roster, starting_pot, total_spent, cassa = svc.get_team_roster(conn, team_name, current_app.config.get('ROSE_STRUCTURE', {}))
+        conn.close()
+        return render_template('team.html', tname=team_name, roster=team_roster, rose_structure=current_app.config.get('ROSE_STRUCTURE', {}), starting_pot=starting_pot, total_spent=total_spent, cassa=cassa, squadre=[])
+    except Exception:
+        # preserve existing fallback behavior: empty roster and default cash
+        return render_template('team.html', tname=team_name, roster=team_roster, rose_structure=current_app.config.get('ROSE_STRUCTURE', {}), starting_pot=300.0, total_spent=0.0, cassa=300.0, squadre=[])
