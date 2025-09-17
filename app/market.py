@@ -2,6 +2,7 @@ from flask import Blueprint, render_template, current_app, request
 import sqlite3
 from flask import redirect, jsonify
 import urllib.parse
+from app.services.market_service import MarketService
 
 bp = Blueprint("market", __name__)
 
@@ -386,107 +387,31 @@ def assegna_giocatore():
     costo = request.form.get('costo')
     anni_contratto = request.form.get('anni_contratto')
     opzione = 'SI' if request.form.get('opzione') == 'on' else 'NO'
-
-    # validation
-    if not id or not str(id).isdigit():
-        return ("ID giocatore non valido.", 400)
+    service = MarketService()
+    # re-use service validation; keep canonical team check from app config
+    error_msg = service.validate_player_assignment(id, squadra, costo, anni_contratto)
     if squadra and squadra not in current_app.config.get('SQUADRE'):
-        return ("Squadra selezionata non valida.", 400)
-    try:
-        costo_val = float(str(costo).replace(",", "").replace("€", "").strip()) if costo not in (None, "") else 0.0
-        if costo_val < 0 or costo_val > 1000:
-            return ("Il costo deve essere tra 0 e 1000.", 400)
-    except Exception:
-        return ("Costo non valido.", 400)
-    if anni_contratto and str(anni_contratto) not in ["1","2","3"]:
-        return ("Anni contratto non valido.", 400)
-
-    def normalize_assignment_values(squadra, costo, anni_contratto, opzione):
-        if costo in (None, ""):
-            costo_val = 0.0
-        else:
-            try:
-                costo_val = float(str(costo).replace(",", "").replace("€", "").strip())
-            except Exception:
-                costo_val = 0.0
-        if not squadra:
-            squadra_val = None
-            anni_contratto = None
-            opzione = None
-        else:
-            squadra_val = squadra
-        return squadra_val, costo_val, anni_contratto, opzione
-
-    def atomic_charge_team(conn, team, amount):
-        cur = conn.cursor()
-        cur.execute("SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?", (team,))
-        r = cur.fetchone()
-        if not r:
-            cur.execute("INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)", (team, 0, 300.0, 300.0))
-        else:
-            if r[2] is None:
-                iniz = float(r[1]) if r[1] is not None else 300.0
-                cur.execute("UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (iniz, team))
-        cur.execute("UPDATE fantateam SET cassa_attuale = cassa_attuale - ? WHERE squadra=? AND cassa_attuale >= ?", (amount, team, amount))
-        return cur.rowcount > 0
-
-    def refund_team(conn, team, amount):
-        cur = conn.cursor()
-        cur.execute("SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?", (team,))
-        r = cur.fetchone()
-        if r:
-            try:
-                cur_att = r['cassa_attuale']
-            except Exception:
-                cur_att = r[2]
-            if cur_att is not None:
-                new = float(cur_att) + amount
-                cur.execute("UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (new, team))
-            else:
-                try:
-                    iniz = float(r['cassa_iniziale']) if r['cassa_iniziale'] is not None else 300.0
-                except Exception:
-                    iniz = 300.0
-                new = iniz + amount
-                cur.execute("UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (new, team))
-        else:
-            cur.execute("INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)", (team, 0, 300.0, 300.0 + amount))
+        error_msg = "Squadra selezionata non valida."
+    if error_msg:
+        return (error_msg, 400)
 
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    squadra_val, costo_val, anni_contratto, opzione = normalize_assignment_values(squadra, costo, anni_contratto, opzione)
     try:
-        cur.execute("SELECT squadra, Costo FROM giocatori WHERE rowid=?", (id,))
-        prev = cur.fetchone()
-        prev_team = None
-        prev_cost = 0.0
-        if prev:
-            prev_team = prev['squadra'] if 'squadra' in prev.keys() else prev[0]
+        res = service.assign_player(conn, id, squadra, costo, anni_contratto, opzione)
+        if not res.get('success'):
+            avail = res.get('available')
+            if avail is None:
+                avail = 300.0
+            needed = 0.0
             try:
-                prev_cost = float(prev['Costo']) if prev['Costo'] not in (None, "") else 0.0
+                needed = float(str(costo).replace(",", "").replace("€", "").strip()) if costo not in (None, "") else 0.0
             except Exception:
-                prev_cost = 0.0
-        if squadra_val is None:
-            if prev_team and prev_cost > 0:
-                refund_team(conn, prev_team, prev_cost)
-            cur.execute('UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?', (None, None, None, None, id))
-            conn.commit()
-            return redirect('/')
-        if prev_team and prev_team != squadra_val and prev_cost > 0:
-            refund_team(conn, prev_team, prev_cost)
-        if costo_val > 0:
-            ok = atomic_charge_team(conn, squadra_val, costo_val)
-            if not ok:
-                conn.rollback()
-                cur.execute("SELECT cassa_attuale FROM fantateam WHERE squadra=?", (squadra_val,))
-                rr = cur.fetchone()
-                avail = float(rr['cassa_attuale']) if rr and rr['cassa_attuale'] is not None else 300.0
-                return (f'Fondi insufficienti per assegnare (costo: {costo_val} > disponibile: {avail}).', 400)
-        cur.execute('UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?', (squadra_val, costo_val, anni_contratto, opzione, id))
-        conn.commit()
+                needed = 0.0
+            return (f'Fondi insufficienti per assegnare (costo: {needed} > disponibile: {avail}).', 400)
     finally:
         conn.close()
+
     return redirect('/')
 
 
@@ -514,86 +439,20 @@ def update_player():
         error_msg = 'Anni contratto non valido.'
     if error_msg:
         return (jsonify({'error': error_msg, 'help':'Controlla i dati inseriti e riprova.'}), 400)
-
-    if squadra == '' or squadra is None:
-        squadra_val = None
-        anni_contratto = None
-        opzione = None
-    else:
-        squadra_val = squadra
+    # delegate to MarketService for the heavy lifting
+    service = MarketService()
+    # normalize empty team -> None behavior inside service
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
     try:
-        try:
-            costo_val = float(str(costo).replace(",", "").replace("€", "").strip()) if costo not in (None, "") else 0.0
-        except Exception:
-            costo_val = 0.0
-        cur.execute('SELECT squadra, Costo FROM giocatori WHERE rowid=?', (pid,))
-        prev = cur.fetchone()
-        prev_team = None
-        prev_cost = 0.0
-        if prev:
-            prev_team = prev['squadra']
-            try:
-                prev_cost = float(prev['Costo']) if prev['Costo'] not in (None, "") else 0.0
-            except Exception:
-                prev_cost = 0.0
-        if squadra_val is None and prev_team:
-            if prev_cost > 0:
-                # refund
-                cur.execute('SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?', (prev_team,))
-                r = cur.fetchone()
-                if r:
-                    try:
-                        cur_att = r['cassa_attuale']
-                    except Exception:
-                        cur_att = r[2]
-                    if cur_att is not None:
-                        new = float(cur_att) + prev_cost
-                        cur.execute('UPDATE fantateam SET cassa_attuale=? WHERE squadra=?', (new, prev_team))
-                cur.execute('UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?', (None, None, None, None, pid))
-                conn.commit()
-                cur.execute('SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, squadra FROM giocatori WHERE rowid=?', (pid,))
-                row = cur.fetchone()
-                return jsonify(dict(row) if row else {})
-        if prev_team and prev_team != squadra_val and prev_cost > 0:
-            # refund previous
-            cur.execute('SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?', (prev_team,))
-            r = cur.fetchone()
-            if r:
-                try:
-                    cur_att = r['cassa_attuale']
-                except Exception:
-                    cur_att = r[2]
-                if cur_att is not None:
-                    new = float(cur_att) + prev_cost
-                    cur.execute('UPDATE fantateam SET cassa_attuale=? WHERE squadra=?', (new, prev_team))
-        if squadra_val and costo_val > 0:
-            # atomic deduct
-            cur.execute('SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?', (squadra_val,))
-            r = cur.fetchone()
-            if not r:
-                cur.execute('INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)', (squadra_val, 0, 300.0, 300.0))
-            else:
-                if r['cassa_attuale'] is None:
-                    iniz = float(r['cassa_iniziale']) if r['cassa_iniziale'] is not None else 300.0
-                    cur.execute('UPDATE fantateam SET cassa_attuale=? WHERE squadra=?', (iniz, squadra_val))
-            cur.execute('UPDATE fantateam SET cassa_attuale = cassa_attuale - ? WHERE squadra=? AND cassa_attuale >= ?', (costo_val, squadra_val, costo_val))
-            if cur.rowcount == 0:
-                conn.rollback()
-                cur.execute('SELECT cassa_attuale FROM fantateam WHERE squadra=?', (squadra_val,))
-                r = cur.fetchone()
-                avail = float(r['cassa_attuale']) if r and r['cassa_attuale'] is not None else 300.0
-                return (jsonify({'error':'Fondi insufficienti','needed': costo_val, 'available': avail}), 400)
-        cur.execute('UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?', (squadra_val, costo_val, anni_contratto, opzione, pid))
-        conn.commit()
-        cur.execute('SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, squadra FROM giocatori WHERE rowid=?', (pid,))
-        row = cur.fetchone()
-        result = dict(row) if row else {}
+        res = service.update_player(conn, pid, squadra, costo, anni_contratto, opzione)
+        # service returns either an updated row dict or an error mapping
+        if isinstance(res, dict) and res.get('error'):
+            # keep previous JSON error shape
+            return (jsonify(res), 400)
+        return jsonify(res)
     finally:
         conn.close()
-    return jsonify(result)
 
 
 @bp.route('/rose', methods=['GET'])

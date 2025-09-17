@@ -83,114 +83,27 @@ def ensure_teams_table():
 
 
 def get_team_cash(conn, team):
-    """Return a tuple (starting, current) for the given team. Uses fantateam, falls back to 300."""
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?", (team,)
-    )
-    r = cur.fetchone()
-    if r:
-        iniziale = float(r[0]) if r[0] is not None else 300.0
-        attuale = float(r[1]) if r[1] is not None else iniziale
-    else:
-        iniziale = 300.0
-        attuale = 300.0
-    return iniziale, attuale
+    """Delegate get_team_cash to MarketService for a single implementation.
+
+    Kept as a thin wrapper to preserve existing call sites in this module.
+    """
+    svc = MarketService()
+    return svc.get_team_cash(conn, team)
 
 
 def update_team_cash(conn, team, new_attuale):
-    cur = conn.cursor()
-    # Preserve existing carryover and cassa_iniziale if the row exists, otherwise create sensible defaults
-    cur.execute(
-        "SELECT carryover, cassa_iniziale FROM fantateam WHERE squadra=?", (team,)
-    )
-    r = cur.fetchone()
-    if r and r[0] is not None:
-        carryover = float(r[0]) if r[0] is not None else 0.0
-        cassa_iniziale = float(r[1]) if r[1] is not None else new_attuale
-    else:
-        carryover = 0.0
-        cassa_iniziale = new_attuale
-    cur.execute(
-        "INSERT OR REPLACE INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)",
-        (team, carryover, cassa_iniziale, new_attuale),
-    )
-    # Note: caller should commit
+    svc = MarketService()
+    return svc.update_team_cash(conn, team, new_attuale)
 
 
 def atomic_charge_team(conn, team, amount):
-    """Attempt to atomically deduct `amount` from team's cassa_attuale.
-    Returns True if deduction succeeded, False if insufficient funds.
-    Ensures a fantateam row exists (with default 300) before attempting the atomic update.
-    """
-    cur = conn.cursor()
-    # Ensure team row exists while preserving carryover/cassa_iniziale semantics
-    cur.execute(
-        "SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
-        (team,),
-    )
-    r = cur.fetchone()
-    if not r:
-        # create default row with sensible defaults
-        cur.execute(
-            "INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)",
-            (team, 0, 300.0, 300.0),
-        )
-    else:
-        # if cassa_attuale is NULL, initialize it from cassa_iniziale or 300
-        if r[2] is None:
-            iniz = float(r[1]) if r[1] is not None else 300.0
-            cur.execute(
-                "UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (iniz, team)
-            )
-    # atomic update: only subtract if enough funds
-    cur.execute(
-        "UPDATE fantateam SET cassa_attuale = cassa_attuale - ? WHERE squadra=? AND cassa_attuale >= ?",
-        (amount, team, amount),
-    )
-    return cur.rowcount > 0
+    svc = MarketService()
+    return svc.atomic_charge_team(conn, team, amount)
 
 
 def refund_team(conn, team, amount):
-    """Refund amount to team's cassa_attuale (create row if needed)."""
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
-        (team,),
-    )
-    r = cur.fetchone()
-    if r:
-        # r can be a tuple-like; handle both index and key access
-        try:
-            cur_att = r["cassa_attuale"]
-        except Exception:
-            cur_att = r[2]
-        if cur_att is not None:
-            new = float(cur_att) + amount
-            cur.execute(
-                "UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (new, team)
-            )
-        else:
-            # initialize from cassa_iniziale if present, else default 300
-            try:
-                iniz = (
-                    float(r["cassa_iniziale"])
-                    if r["cassa_iniziale"] is not None
-                    else 300.0
-                )
-            except Exception:
-                iniz = 300.0
-            new = iniz + amount
-            cur.execute(
-                "UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (new, team)
-            )
-    else:
-        # create with sensible defaults: carryover 0, cassa_iniziale 300, and cassa_attuale = 300 + amount
-        cur.execute(
-            "INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)",
-            (team, 0, 300.0, 300.0 + amount),
-        )
-    # caller should commit
+    svc = MarketService()
+    return svc.refund_team(conn, team, amount)
 
 
 # Ensure DB columns at startup
@@ -1135,66 +1048,31 @@ def index():
 
 
 def validate_player_assignment(id, squadra, costo, anni_contratto):
-    if not id or not str(id).isdigit():
-        return "ID giocatore non valido."
-    if squadra and squadra not in SQUADRE:
-        return "Squadra selezionata non valida."
-    try:
-        costo_val = (
-            float(str(costo).replace(",", "").replace("€", "").strip())
-            if costo not in (None, "")
-            else 0.0
-        )
-        if costo_val < 0 or costo_val > 1000:
-            return "Il costo deve essere tra 0 e 1000."
-    except Exception:
-        return "Costo non valido."
-    if anni_contratto and str(anni_contratto) not in ["1", "2", "3"]:
-        return "Anni contratto non valido."
-    return None
+    svc = MarketService()
+    return svc.validate_player_assignment(id, squadra, costo, anni_contratto)
 
 
 def normalize_assignment_values(squadra, costo, anni_contratto, opzione):
-    if costo in (None, ""):
-        costo_val = 0.0
-    else:
-        try:
-            costo_val = float(str(costo).replace(",", "").replace("€", "").strip())
-        except Exception:
-            costo_val = 0.0
-    if not squadra:
-        squadra_val = None
-        anni_contratto = None
-        opzione = None
-    else:
-        squadra_val = squadra
-    return squadra_val, costo_val, anni_contratto, opzione
+    svc = MarketService()
+    return svc.normalize_assignment_values(squadra, costo, anni_contratto, opzione)
 
 
 @app.route("/assegna_giocatore", methods=["POST"])
 def assegna_giocatore():
-    # Tutte le query SQL usano parametri per prevenire SQL injection.
+    """Handle the assign form: delegate business logic to MarketService and preserve
+    the previous HTML error/redirect behavior expected by the frontend.
     """
-    Assegna un giocatore a una squadra, gestendo costi, opzioni e anni di contratto.
-    - Valida l'input utente
-    - Aggiorna la cassa della squadra
-    - Gestisce il rimborso in caso di cambio squadra
-    - Aggiorna la tabella giocatori
-    """
-    """
-  Valida i dati di assegnazione giocatore ricevuti dal form.
-  Restituisce una stringa di errore se non valido, altrimenti None.
-  """
-    """
-  Normalizza i valori di input per l'assegnazione del giocatore.
-  Restituisce tuple di valori coerenti per l'update SQL.
-  """
     id = request.form.get("id")
     squadra = request.form.get("squadra")
     costo = request.form.get("costo")
     anni_contratto = request.form.get("anni_contratto")
     opzione = "SI" if request.form.get("opzione") == "on" else "NO"
-    error_msg = validate_player_assignment(id, squadra, costo, anni_contratto)
+
+    service = MarketService()
+    # Basic validation: service checks numeric parsing; web layer enforces canonical teams
+    error_msg = service.validate_player_assignment(id, squadra, costo, anni_contratto)
+    if squadra and squadra not in SQUADRE:
+        error_msg = "Squadra selezionata non valida."
     if error_msg:
         return (
             f'<html><body style="font-family:Arial; color:#8a1f11; background:#fff8e1; padding:24px; border-radius:8px;">'
@@ -1202,137 +1080,34 @@ def assegna_giocatore():
             f'<div style="margin-bottom:12px;">{error_msg}</div>'
             f'<a href="/" style="color:#0056b3; text-decoration:underline;">Torna indietro</a>'
             f"</body></html>",
-            id = request.form.get("id")
-            squadra = request.form.get("squadra")
-            costo = request.form.get("costo")
-            anni_contratto = request.form.get("anni_contratto")
-            opzione = "SI" if request.form.get("opzione") == "on" else "NO"
-
-            service = MarketService()
-            # Validate input (service performs basic checks; web layer enforces canonical teams)
-            error_msg = service.validate_player_assignment(id, squadra, costo, anni_contratto)
-            if squadra and squadra not in SQUADRE:
-                error_msg = "Squadra selezionata non valida."
-            if error_msg:
-                return (
-                    f'<html><body style="font-family:Arial; color:#8a1f11; background:#fff8e1; padding:24px; border-radius:8px;">'
-                    f"<h2>Errore di assegnazione</h2>"
-                    f'<div style="margin-bottom:12px;">{error_msg}</div>'
-                    f'<a href="/" style="color:#0056b3; text-decoration:underline;">Torna indietro</a>'
-                    f"</body></html>",
-                    400,
-                )
-
-            conn = sqlite3.connect(DB_PATH)
-            conn.row_factory = sqlite3.Row
-            try:
-                res = service.assign_player(conn, id, squadra, costo, anni_contratto, opzione)
-                if not res.get("success"):
-                    # insufficient funds or other business error -> return HTML 400 like previous behavior
-                    avail = res.get("available")
-                    if avail is None:
-                        avail = 300.0
-                    return (
-                        '<html><body>Fondi insufficienti per assegnare (costo: {} &gt; disponibile: {}). <a href="/">Indietro</a></body></html>'.format(
-                            float(str(costo).replace(",", "").replace("€", "").strip()) if costo not in (None, "") else 0.0,
-                            avail,
-                        ),
-                        400,
-                    )
-            finally:
-                conn.close()
-            from flask import redirect
-
-            return redirect("/")
-    opzione = data.get("opzione")
-    # Validazione input
-    error_msg = None
-    if not pid or not str(pid).isdigit():
-        error_msg = "ID giocatore non valido."
-    if squadra and squadra not in SQUADRE:
-        error_msg = "Squadra selezionata non valida."
-    try:
-        costo_val = (
-            float(str(costo).replace(",", "").replace("€", "").strip())
-            if costo not in (None, "")
-            else 0.0
-        )
-        if costo_val < 0 or costo_val > 1000:
-            error_msg = "Il costo deve essere tra 0 e 1000."
-    except Exception:
-        error_msg = "Costo non valido."
-    if anni_contratto and str(anni_contratto) not in ["1", "2", "3"]:
-        error_msg = "Anni contratto non valido."
-    if error_msg:
-        return (
-            __import__("flask").jsonify(
-                {"error": error_msg, "help": "Controlla i dati inseriti e riprova."}
-            ),
             400,
         )
-    # normalize empty squadra to NULL
-    if squadra == "" or squadra is None:
-        squadra_val = None
-        anni_contratto = None
-        opzione = None
-    else:
-        squadra_val = squadra
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        try:
-            # parse costo
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        res = service.assign_player(conn, id, squadra, costo, anni_contratto, opzione)
+        if not res.get("success"):
+            # insufficient funds -> return same HTML 400 shape as before
+            avail = res.get("available")
+            if avail is None:
+                avail = 300.0
+            needed = 0.0
             try:
-                costo_val = (
-                    float(str(costo).replace(",", "").replace("€", "").strip())
-                    if costo not in (None, "")
-                    else 0.0
-                )
+                needed = float(str(costo).replace(",", "").replace("€", "").strip()) if costo not in (None, "") else 0.0
             except Exception:
-                costo_val = 0.0
-
-            # fetch previous assignment
-            cur.execute("SELECT squadra, Costo FROM giocatori WHERE rowid=?", (pid,))
-            prev = cur.fetchone()
-            prev_team = None
-            prev_cost = 0.0
-            # Basic validation using the service for numeric parsing; web-layer enforces canonical teams
-            service = MarketService()
-            if not pid or not str(pid).isdigit():
-                return (jsonify({"error": "ID giocatore non valido."}), 400)
-            if squadra and squadra not in SQUADRE:
-                return (jsonify({"error": "Squadra selezionata non valida."}), 400)
-            if anni_contratto and str(anni_contratto) not in ["1", "2", "3"]:
-                return (jsonify({"error": "Anni contratto non valido."}), 400)
-
-            conn = sqlite3.connect(DB_PATH)
-            conn.row_factory = sqlite3.Row
-            try:
-                res = service.update_player(conn, pid, squadra, costo, anni_contratto, opzione)
-                # service returns error dict on insufficient funds
-                if isinstance(res, dict) and res.get("error"):
-                    # Normalize legacy response shape
-                    return (jsonify(res), 400)
-                return jsonify(res)
-            finally:
-                conn.close()
-        if sname in rose:
-            rose[sname][key].append(
-                {
-                    "id": row["id"],
-                    "nome": row["nome"],
-                    "ruolo": codice_ruolo,
-                    "squadra_reale": row["squadra_reale"],
-                    "costo": row["costo"],
-                    "anni_contratto": row["anni_contratto"],
-                    "opzione": row["opzione"],
-                }
+                needed = 0.0
+            return (
+                '<html><body>Fondi insufficienti per assegnare (costo: {} &gt; disponibile: {}). <a href="/">Indietro</a></body></html>'.format(
+                    needed, avail
+                ),
+                400,
             )
+    finally:
+        conn.close()
 
-    # render using the combined team list so links and displays include non-canonical names
-    return render_template_string(
-        ROSE_HTML, squadre=all_teams, rose_structure=ROSE_STRUCTURE, rose=rose
-    )
+    from flask import redirect
+    return redirect("/")
 
 
 TEAM_HTML = """
