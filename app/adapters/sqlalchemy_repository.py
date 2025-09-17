@@ -13,11 +13,22 @@ def _map_player(orm: ORMPlayer) -> DomainPlayer:
         role=orm.role or "",
         team_id=orm.team_id,
         costo=float(orm.costo) if orm.costo is not None else None,
+        anni_contratto=orm.anni_contratto,
+        opzione=orm.opzione,
+        squadra_reale=orm.squadra_reale,
+        is_injured=bool(orm.is_injured),
     )
 
 
 def _map_team(orm: ORMTeam) -> DomainTeam:
-    return DomainTeam(id=orm.id, name=orm.name)
+    domain_team = DomainTeam(id=orm.id, name=orm.name)
+    # map players relationship if loaded
+    try:
+        domain_team.players = [_map_player(p) for p in orm.players]
+    except Exception:
+        # relationship not present or not loaded; leave empty
+        domain_team.players = []
+    return domain_team
 
 
 class SQLAlchemyPlayerRepository(PlayerRepository):
@@ -51,6 +62,10 @@ class SQLAlchemyPlayerRepository(PlayerRepository):
         orm.role = player.role
         orm.team_id = player.team_id
         orm.costo = int(player.costo) if player.costo is not None else None
+        orm.anni_contratto = player.anni_contratto
+        orm.opzione = player.opzione
+        orm.squadra_reale = player.squadra_reale
+        orm.is_injured = bool(player.is_injured)
 
         self.session.commit()
         # refresh to get id
