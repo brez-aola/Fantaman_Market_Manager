@@ -88,21 +88,45 @@ def get_team_cash(conn, team):
 
     Kept as a thin wrapper to preserve existing call sites in this module.
     """
+    import warnings
+    warnings.warn(
+        "get_team_cash is deprecated here; use MarketService.get_team_cash instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     svc = MarketService()
     return svc.get_team_cash(conn, team)
 
 
 def update_team_cash(conn, team, new_attuale):
+    import warnings
+    warnings.warn(
+        "update_team_cash is deprecated here; use MarketService.update_team_cash instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     svc = MarketService()
     return svc.update_team_cash(conn, team, new_attuale)
 
 
 def atomic_charge_team(conn, team, amount):
+    import warnings
+    warnings.warn(
+        "atomic_charge_team is deprecated here; use MarketService.atomic_charge_team instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     svc = MarketService()
     return svc.atomic_charge_team(conn, team, amount)
 
 
 def refund_team(conn, team, amount):
+    import warnings
+    warnings.warn(
+        "refund_team is deprecated here; use MarketService.refund_team instead",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     svc = MarketService()
     return svc.refund_team(conn, team, amount)
 
