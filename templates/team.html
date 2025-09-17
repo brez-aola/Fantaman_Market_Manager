@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <title>Roster - {{ tname }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+      <header class="app-header">
+        <div class="brand">
+          <img src="https://raw.githubusercontent.com/marketplaceimages/fantaman-logo.png" alt="Logo">
+          <span class="title">Fantaman</span>
+        </div>
+        <nav class="center">
+          <a href="/">Market Manager</a>
+          <a href="/rose">Rose Squadre</a>
+        </nav>
+        <div class="account">
+          <img src="https://cdn-icons-png.flaticon.com/512/1077/1077012.png" alt="Account">
+        </div>
+      </header>
+      <div id="team-bar">
+        {% for squadra in squadre %}
+        <a class="team-link" href="/squadra/{{ squadra|urlencode }}"><span>{{ squadra }}</span></a>
+        {% endfor %}
+      </div>
+      <div style="height:84px;"></div>
+      <h1>Roster: {{ tname }}</h1>
+
+      <div class="cassa">
+          <strong>Cassa</strong>
+          <div>Iniziale: {{ starting_pot }}</div>
+          <div>Speso: {{ total_spent }}</div>
+          <div>Rimanente: {{ cassa }}</div>
+      </div>
+
+      {% for ruolo, n in rose_structure.items() %}
+          {% set players = roster.get(ruolo, []) %}
+          <h2>{{ ruolo }} <span class="badge">Mancano: {{ (n - (players|length)) if n - (players|length) > 0 else 0 }}</span></h2>
+          <table>
+              <tr><th>#</th><th>Nome</th><th>Squadra reale</th><th>Costo</th><th>Anni contratto</th><th>Opzione</th></tr>
+              {% for p in players %}
+              <tr>
+                  <td>{{ loop.index }}</td>
+                  <td>{{ p.nome }}</td>
+                  <td>{{ p.squadra_reale }}</td>
+                  <td>{{ p.costo if p.costo is not none else '' }}</td>
+                  <td>{{ p.anni_contratto if p.anni_contratto is not none else '' }}</td>
+                  <td>{{ p.opzione if p.opzione is not none else '' }}</td>
+              </tr>
+              {% endfor %}
+              {% for i in range(n - (players|length)) %}
+              <tr>
+                  <td>{{ (players|length) + i + 1 }}</td>
+                  <td></td><td></td><td></td><td></td><td></td>
+              </tr>
+              {% endfor %}
+          </table>
+      {% endfor %}
+
+    </body>
+    </html>

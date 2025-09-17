@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Fantacalcio - Rose Squadre</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+  <header class="app-header">
+      <div class="brand">
+        <img src="https://raw.githubusercontent.com/marketplaceimages/fantaman-logo.png" alt="Logo">
+        <span class="title">Fantaman</span>
+      </div>
+      <nav class="center">
+        <a href="/">Market Manager</a>
+        <a href="/rose">Rose Squadre</a>
+      </nav>
+      <div class="account">
+        <img src="https://cdn-icons-png.flaticon.com/512/1077/1077012.png" alt="Account">
+      </div>
+    </header>
+    <div id="team-bar">
+      {% for squadra in squadre %}
+      <a class="team-link" href="/squadra/{{ squadra|urlencode }}"><span>{{ squadra }}</span></a>
+      {% endfor %}
+    </div>
+    <div style="height:84px;"></div>
+    <h1>Rose Attuali delle Squadre</h1>
+    {% for squadra in squadre %}
+    <div class="squadra">
+      <h2><a href="/squadra/{{ squadra|urlencode }}">{{ squadra }}</a></h2>
+      {% for ruolo, n in rose_structure.items() %}
+      <table>
+          <tr>
+              <th colspan="6">{{ ruolo }} ({{ n }})</th>
+          </tr>
+          <tr>
+              <th>#</th>
+              <th>Nome</th>
+              <th>Squadra reale</th>
+              <th>Costo</th>
+              <th>Anni contratto</th>
+              <th>Opzione</th>
+          </tr>
+          {% set players = rose.get(squadra, {}).get(ruolo, []) %}
+                      {% for p in players %}
+          <tr data-player-id="{{ p.id }}" data-role="{{ p.ruolo }}">
+              <td>{{ loop.index }}</td>
+              <td class="p-nome">{{ p.nome }}</td>
+              <td class="p-squadra-reale">{{ p.squadra_reale }}</td>
+              <td class="p-costo">{{ p.costo if p.costo is not none else '' }}</td>
+              <td class="p-anni">{{ p.anni_contratto if p.anni_contratto is not none else '' }}</td>
+              <td class="option-checkbox p-opzione">{{ p.opzione if p.opzione is not none else '' }}</td>
+        <td>
+          <button class="edit-btn" data-id="{{ p.id }}">Edit</button>
+        </td>
+          </tr>
+          {% endfor %}
+          {% for i in range(n - (players|length)) %}
+          <tr>
+              <td>{{ (players|length) + i + 1 }}</td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td></td>
+              <td class="option-checkbox"><input type="checkbox" disabled></td>
+          </tr>
+          {% endfor %}
+      </table>
+      {% endfor %}
+    </div>
+    {% endfor %}
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

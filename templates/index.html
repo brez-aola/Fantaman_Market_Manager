@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+  <title>Catch a Buzz - Market Manager</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand">
+      <img src="https://raw.githubusercontent.com/marketplaceimages/fantaman-logo.png" alt="Logo">
+      <span class="title">Fantaman</span>
+    </div>
+    <nav class="center">
+      <a href="/">Market Manager</a>
+      <a href="/rose">Rose Squadre</a>
+    </nav>
+    <div class="account">
+      <img src="https://cdn-icons-png.flaticon.com/512/1077/1077012.png" alt="Account">
+    </div>
+  </header>
+  <div id="team-bar">
+    {% for squadra in squadre %}
+    <a class="team-link" href="/squadra/{{ squadra|urlencode }}">
+      <span>{{ squadra }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  <div style="height:84px;"></div>
+  <div style="height:44px;"></div>
+  <h1 style="margin-top:0px;">Catch a Buzz - Market Manager</h1>
+  <!-- Visible server-side debug marker: shows the query the server received and how many results it returned -->
+    <!-- Team cash summary: boxes ordered by remaining cash -->
+    <div class="team-cash-container" style="display:flex; gap:8px; flex-wrap:nowrap; margin-bottom:18px; align-items:stretch; justify-content:center;">
+      {% for t in team_casse %}
+      <div class="team-box" style="flex:0 1 12.5%; min-width:120px; max-width:12.5%; box-sizing:border-box;">
+        <div class="team-name">{{ t.squadra }}</div>
+        <div class="team-values">Cassa attuale: <strong>{{ t.remaining }}</strong></div>
+        <div class="team-sub">Cassa iniziale: {{ t.starting }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="team-missing-container" style="display:flex; gap:8px; flex-wrap:nowrap; margin-bottom:18px; align-items:stretch; justify-content:center;">
+      {% for t in team_casse_missing %}
+      <div class="team-box" style="flex:0 1 12.5%; min-width:120px; max-width:12.5%; box-sizing:border-box; background:#f8f8f8;">
+        <div class="team-name">{{ t.squadra }}</div>
+        <div style="margin-top:8px;">
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <span class="team-missing">Giocatori mancanti: <strong>{{ t.missing }}</strong></span>
+            <span class="role-badge role-p">P {{ t.missing_portieri }}</span>
+            <span class="role-badge role-d">D {{ t.missing_dif }}</span>
+            <span class="role-badge role-c">C {{ t.missing_cen }}</span>
+            <span class="role-badge role-a">A {{ t.missing_att }}</span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    <form method="get" class="search">
+      <input type="text" name="q" placeholder="Cerca giocatore, squadra..." value="{{ query }}">
+      <button type="submit">Cerca</button>
+    </form>
+    {% if suggestions and query %}
+      <div class="suggestions" style="margin: 10px 0; padding: 10px; background: #f8f9fa; border-left: 3px solid #007bff; border-radius: 4px;">
+        <strong>💡 Forse intendevi:</strong>
+        {% for suggestion in suggestions %}
+          <a href="?{{ request.query_string|safe|replace('q=' ~ query|urlencode, 'q=' ~ suggestion|urlencode) }}" style="display: inline-block; margin: 2px 8px 2px 0; padding: 4px 8px; background: #e7f1ff; color: #0056b3; text-decoration: none; border-radius: 12px; font-size: 0.9em;">{{ suggestion }}</a>
+        {% endfor %}
+      </div>
+    {% endif %}
+    {% if query and results|length > 0 %}
+    <div id="players-table">
+    <table>
+        <tr>
+            {% for col in columns %}
+                {% set sk = display_to_sortkey.get(col) %}
+                <th class="{% if sk and sk==request.args.get('sort_by') %}sort-active{% endif %}">
+                  {% if sk %}
+                    <a class="header-link" href="{{ header_toggle_links[sk] }}">{{ col }}
+                      {% if request.args.get('sort_by') == sk %}
+                        {% if request.args.get('sort_dir','asc') == 'asc' %} 🔼 {% else %} 🔽 {% endif %}
+                      {% endif %}
+                    </a>
+                  {% else %}
+                    {{ col }}
+                  {% endif %}
+                </th>
+            {% endfor %}
+            <th>Azioni</th>
+        </tr>
+        {% for row in results %}
+    <tr data-player-id="{{ row['id'] }}" data-player-name="{{ row['Nome'] if 'Nome' in row.keys() else (row['nome'] if 'nome' in row.keys() else row['id']) }}">
+      {% for col in columns %}
+      <td>{{ row[col] }}</td>
+      {% endfor %}
+      <td>
+        <button class="assign-btn" data-id="{{ row['id'] }}" data-name="{{ row['Nome'] if 'Nome' in row.keys() else (row['nome'] if 'nome' in row.keys() else row['id']) }}">Assegna giocatore</button>
+      </td>
+    </tr>
+        {% endfor %}
+    </table>
+    </div>
+    {% endif %}
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+      <!-- Popup Assegna Giocatore -->
+      <div id="assignPopup" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.4); z-index:1000;">
+          <div style="background:#fff; padding:30px; max-width:400px; margin:80px auto; border-radius:8px; position:relative;">
+              <h2>Assegna giocatore</h2>
+              <form id="assignForm" method="post" action="/assegna_giocatore" onsubmit="return submitAssignForm();">
+                  <input type="hidden" name="id" id="assign_id">
+                  <div><b>Nome:</b> <span id="assign_nome"></span></div>
+                  <div style="margin-top:10px;">
+                      <label>Squadra:</label>
+                      <select name="squadra" required>
+                          <option value="">Seleziona...</option>
+                          {% for s in squadre %}
+                          <option value="{{ s }}">{{ s }}</option>
+                          {% endfor %}
+                      </select>
+                  </div>
+                  <div style="margin-top:10px;">
+                      <label>Costo:</label>
+                      <input type="number" name="costo" min="1" required>
+                  </div>
+                  <div style="margin-top:10px;">
+                      <label>Anni contratto:</label>
+                      <select name="anni_contratto" id="anni_contratto" onchange="updateOpzione()" required>
+                          <option value="1">1</option>
+                          <option value="2">2</option>
+                          <option value="3">3</option>
+                      </select>
+                  </div>
+                  <div style="margin-top:10px;">
+                      <label>Opzione:</label>
+                      <input type="checkbox" name="opzione" id="opzione" checked>
+                  </div>
+                  <div style="margin-top:20px;">
+                      <button type="submit">Salva</button>
+                      <button type="button" onclick="closeAssignPopup()">Annulla</button>
+                  </div>
+                  <!-- inline error container for assign dialog -->
+                  <div id="assignError" role="alert" style="color:#8a1f11; background:#fee; padding:8px; margin-top:12px; display:none; border:1px solid #f5c2c2; border-radius:4px;"></div>
+              </form>
+              <button style="position:absolute; top:10px; right:10px;" onclick="closeAssignPopup()">&times;</button>
+          </div>
+      </div>
+
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <p>{{ results|length }} giocatori trovati.</p>
+</body>
+</html>

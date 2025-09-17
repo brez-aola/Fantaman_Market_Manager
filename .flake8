@@ -1,0 +1,9 @@
+[flake8]
+max-line-length = 88
+extend-ignore = E203,W503
+exclude = .venv,venv,build,dist,.git,__pycache__,tests/data,apply_options_*.py,scripts
+per-file-ignores =
+    app.py:E501,F541,W605,F841,F405
+    tests/smoke_test_cassa.py:E501
+    apply_options_*.py:E401,E501
+    scripts/*:E402,E501

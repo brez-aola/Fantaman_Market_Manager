@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.env
+.env.*
+venv/
+.envrc
+.Python
+
+# Databases
+*.db
+*.sqlite3
+
+# PyCharm/VSCode
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# backups
+giocatori.db.backup.*
+.venv/
+*.xlsx

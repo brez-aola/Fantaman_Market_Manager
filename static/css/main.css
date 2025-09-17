@@ -1,0 +1,66 @@
+/* Consolidated CSS extracted from templates */
+body { font-family: Arial, sans-serif; margin: 40px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+th { background: #eee; }
+th.sort-active { background: #dfefff; }
+th a.header-link { color: inherit; text-decoration: none; display: inline-block; width:100%; }
+input[type=text] { width: 300px; padding: 6px; }
+.search { margin-bottom: 20px; }
+.nav { margin-bottom: 30px; }
+.nav a { margin-right: 20px; }
+.team-cash-container { display:flex; gap:12px; flex-wrap:nowrap; overflow-x:auto; margin-bottom:18px; align-items:stretch; }
+.team-box { border:1px solid #ccc; padding:10px 12px; background:#fafafa; border-radius:6px; min-width:160px; flex:0 0 auto; }
+.team-name { font-weight:bold; margin-bottom:6px; }
+.team-values { color:#1155cc; }
+.team-sub { font-size:0.9em; color:#666; margin-top:6px; }
+.team-missing { display:inline-block; background:#ffe9d6; color:#7a3b00; padding:4px 8px; border-radius:12px; margin-top:8px; font-weight:bold; }
+.role-badge { display:inline-block; padding:4px 8px; border-radius:10px; color:#fff; font-weight:bold; font-size:0.9em; }
+.role-p { background:#2b6cb0; }
+.role-d { background:#38a169; }
+.role-c { background:#dd6b20; }
+.role-a { background:#d53f8c; }
+/* Rose/team page styles */
+.squadra { margin-bottom: 40px; }
+h2 { margin-bottom: 10px; }
+.option-checkbox { text-align: center; }
+.cassa { border:1px solid #ccc; padding:12px; display:inline-block; margin-bottom:16px; background:#f9f9f9; }
+.badge { display:inline-block; min-width:40px; padding:6px 8px; margin-left:8px; background:#eee; border-radius:6px; text-align:center; }
+/* Header (kept minimal here; inline styles in header elements are preserved) */
+header.app-header { position:fixed; top:0; left:0; width:100%; max-width:100vw; box-sizing:border-box; display:flex; align-items:center; justify-content:space-between; background:#222; color:#fff; padding:16px 32px; z-index:1000; box-shadow:0 2px 8px rgba(0,0,0,0.08); overflow-x:auto; }
+/* Small utility */
+.hidden { display:none !important; }
+
+/* Header and team-bar centralized styles */
+header.app-header {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	max-width: 100vw;
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	background: #222;
+	color: #fff;
+	padding: 10px 20px;
+	z-index: 1000;
+	box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+	overflow-x: auto;
+	font-size: 14px;
+}
+header.app-header .brand { display:flex; align-items:center; gap:8px; min-width:160px; }
+header.app-header .brand img { height:36px; width:36px; border-radius:6px; background:#fff; object-fit:cover; }
+header.app-header .brand .title { font-size:1.1em; font-weight:600; letter-spacing:1px; margin-left:6px; }
+header.app-header nav.center { flex:2; display:flex; justify-content:center; align-items:center; }
+header.app-header nav.center a { color:#fff; text-decoration:none; margin:0 12px; font-weight:500; font-size:0.95rem; }
+header.app-header .account img { height:30px; width:30px; border-radius:50%; background:#fff; object-fit:cover; }
+
+#team-bar { position: fixed; left: 50%; top: 64px; transform: translateX(-50%); display:flex; gap:10px; z-index:1100; }
+.team-link { background:#fff; color:#222; border:1px solid #1155cc; border-radius:14px; font-weight:500; padding:6px 10px; font-size:0.78rem; box-shadow:0 1px 4px rgba(0,0,0,0.07); display:flex; align-items:center; justify-content:center; text-decoration:none; }
+.team-link span { width:100%; display:inline-block; text-align:center; }
+
+/* Slightly reduce general font sizes in header/context */
+body { font-size: 15px; }
+
