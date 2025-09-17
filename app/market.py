@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, current_app, request
 import sqlite3
+from app.db import get_connection
 from flask import redirect, jsonify
 import urllib.parse
 from app.services.market_service import MarketService
@@ -24,8 +25,7 @@ def index():
     page = int(request.args.get("page", 1))
     per_page = 50
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = get_connection(DB_PATH)
     cur = conn.cursor()
     cur.execute("PRAGMA table_info(giocatori)")
     columns_info = cur.fetchall()
@@ -209,8 +209,7 @@ def index():
     suggestions = []
     if query and len(query) >= 2 and len(results) < 5:
         try:
-            conn = sqlite3.connect(DB_PATH)
-            conn.row_factory = sqlite3.Row
+            conn = get_connection(DB_PATH)
             svc = MarketService()
             suggestion_results = svc.get_name_suggestions(conn, query, limit=8)
             for name in suggestion_results:
@@ -278,8 +277,7 @@ def index():
 
     if not team_casse:
         try:
-            conn = sqlite3.connect(DB_PATH)
-            conn.row_factory = sqlite3.Row
+            conn = get_connection(DB_PATH)
             svc = MarketService()
             team_casse = svc.get_team_summaries(conn, SQUADRE, ROSE_STRUCTURE)
             conn.close()
@@ -333,8 +331,7 @@ def assegna_giocatore():
     if error_msg:
         return (error_msg, 400)
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = get_connection(DB_PATH)
     try:
         res = service.assign_player(conn, id, squadra, costo, anni_contratto, opzione)
         if not res.get('success'):
@@ -380,8 +377,7 @@ def update_player():
     # delegate to MarketService for the heavy lifting
     service = MarketService()
     # normalize empty team -> None behavior inside service
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = get_connection(DB_PATH)
     try:
         res = service.update_player(conn, pid, squadra, costo, anni_contratto, opzione)
         # service returns either an updated row dict or an error mapping
@@ -448,8 +444,7 @@ def rose():
         return render_template('rose.html', squadre=all_teams, rose_structure=ROSE_STRUCTURE, rose=rose_map)
 
     # fallback: legacy sqlite3 logic
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = get_connection(DB_PATH)
     cur = conn.cursor()
     cur.execute('''SELECT rowid AS id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, FantaSquadra
         FROM giocatori
@@ -518,8 +513,7 @@ def squadra(team_name):
         # fall back to sqlite
         pass
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = get_connection(DB_PATH)
     cur = conn.cursor()
     cur.execute('SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione FROM giocatori WHERE FantaSquadra = ? AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)', (tname,))
     rows = cur.fetchall()
@@ -527,8 +521,7 @@ def squadra(team_name):
     if rows:
         # If we got rows above from sqlite fallback, use the MarketService helper to compute roster and cassa
         try:
-            conn = sqlite3.connect(DB_PATH)
-            conn.row_factory = sqlite3.Row
+            conn = get_connection(DB_PATH)
             svc = MarketService()
             team_roster, starting_pot, total_spent, cassa = svc.get_team_roster(conn, tname, ROSE_STRUCTURE)
             conn.close()

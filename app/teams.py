@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, current_app
 import sqlite3
+from app.db import get_connection
 
 bp = Blueprint("teams", __name__, url_prefix="/teams")
 
@@ -54,8 +55,7 @@ def team_page(team_name):
     # fallback to sqlite
     # fallback to sqlite via MarketService helper
     try:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
+        conn = get_connection(DB_PATH)
         svc = MarketService()
         team_roster, starting_pot, total_spent, cassa = svc.get_team_roster(conn, team_name, current_app.config.get('ROSE_STRUCTURE', {}))
         conn.close()

@@ -2,6 +2,7 @@ from flask import Flask, render_template_string, request, jsonify
 import urllib.parse
 import sqlite3
 import os
+from app.db import get_connection
 from app.services.market_service import MarketService
 import app.market as market_module
 
@@ -11,7 +12,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), "giocatori.db")
 
 def ensure_db_columns():
     """Assicura che le colonne usate dall'app esistano nella tabella giocatori."""
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection(DB_PATH)
     cur = conn.cursor()
     try:
         cur.execute("PRAGMA table_info(giocatori)")
@@ -49,7 +50,7 @@ def ensure_teams_table():
         "AS Quiriti": 3,
         "AS Plusvalenza": 25,
     }
-    conn = sqlite3.connect(DB_PATH)
+    conn = get_connection(DB_PATH)
     cur = conn.cursor()
     cur.execute(
         """
@@ -683,8 +684,7 @@ def index():
     ):  # Se pochi risultati e query abbastanza lunga
         try:
             # Nuova connessione per i suggerimenti
-            sugg_conn = sqlite3.connect(DB_PATH)
-            sugg_conn.row_factory = sqlite3.Row
+            sugg_conn = get_connection(DB_PATH)
             sugg_cur = sugg_conn.cursor()
 
             # Cerca nomi simili usando una ricerca più permissiva
@@ -718,8 +718,7 @@ def index():
             suggestions = (
                 []
             )  # Compute per-team cash summary (starting, spent, remaining) to render the top boxes
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn = get_connection(DB_PATH)
     cur = conn.cursor()
     team_casse = []
     for s in SQUADRE:
