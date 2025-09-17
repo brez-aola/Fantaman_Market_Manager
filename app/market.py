@@ -209,27 +209,14 @@ def index():
     suggestions = []
     if query and len(query) >= 2 and len(results) < 5:
         try:
-            sugg_conn = sqlite3.connect(DB_PATH)
-            sugg_conn.row_factory = sqlite3.Row
-            sugg_cur = sugg_conn.cursor()
-            suggestion_sql = """
-            SELECT DISTINCT Nome FROM giocatori
-            WHERE Nome LIKE ? OR Nome LIKE ? OR Nome LIKE ?
-            ORDER BY LENGTH(Nome) ASC
-            LIMIT 8
-            """
-            query_variants = [
-                f"%{query[:min(4, len(query))]}%",
-                f"%{query[:min(3, len(query))]}%",
-                f"%{query}%",
-            ]
-            sugg_cur.execute(suggestion_sql, query_variants)
-            suggestion_results = sugg_cur.fetchall()
-            for row in suggestion_results:
-                name = row["Nome"]
-                if not any(r["Nome"] == name for r in results if "Nome" in r.keys()) and name.lower() != query.lower():
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            svc = MarketService()
+            suggestion_results = svc.get_name_suggestions(conn, query, limit=8)
+            for name in suggestion_results:
+                if not any(r.get("Nome") == name for r in results if "Nome" in r.keys()) and name.lower() != query.lower():
                     suggestions.append(name)
-            sugg_conn.close()
+            conn.close()
         except Exception:
             suggestions = []
 
@@ -290,63 +277,14 @@ def index():
         team_casse = []
 
     if not team_casse:
-        conn = sqlite3.connect(DB_PATH)
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-        team_casse = []
-        for s in SQUADRE:
-            cur.execute("SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?", (s,))
-            tr = cur.fetchone()
-            if tr and tr["cassa_iniziale"] is not None:
-                starting = float(tr["cassa_iniziale"])
-            else:
-                starting = 300.0
-            cur.execute(
-                """
-                SELECT COALESCE(SUM(CAST(
-                    REPLACE(REPLACE(REPLACE(REPLACE(COALESCE("Costo", '0'), ',', ''), '%', ''), '€', ''), ' ', '')
-                AS REAL)), 0)
-                FROM giocatori
-                WHERE FantaSquadra = ?
-                  AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)
-            """,
-                (s,),
-            )
-            spent_row = cur.fetchone()
-            spent = float(spent_row[0]) if spent_row and spent_row[0] is not None else 0.0
-            remaining = starting - spent
-            cur.execute(
-                """
-                SELECT SUBSTR("R.",1,1) as code, COUNT(*) as cnt
-                FROM giocatori
-                WHERE FantaSquadra = ?
-                  AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)
-                GROUP BY SUBSTR("R.",1,1)
-            """,
-                (s,),
-            )
-            counts = {row["code"]: row["cnt"] for row in cur.fetchall()}
-            portieri_count = int(counts.get("P", 0)) + int(counts.get("G", 0))
-            dif_count = int(counts.get("D", 0))
-            cen_count = int(counts.get("C", 0))
-            att_count = int(counts.get("A", 0))
-            missing_portieri = max(0, ROSE_STRUCTURE.get("Portieri", 0) - portieri_count)
-            missing_dif = max(0, ROSE_STRUCTURE.get("Difensori", 0) - dif_count)
-            missing_cen = max(0, ROSE_STRUCTURE.get("Centrocampisti", 0) - cen_count)
-            missing_att = max(0, ROSE_STRUCTURE.get("Attaccanti", 0) - att_count)
-            missing_total = missing_portieri + missing_dif + missing_cen + missing_att
-            team_casse.append({
-                "squadra": s,
-                "starting": starting,
-                "spent": spent,
-                "remaining": remaining,
-                "missing": missing_total,
-                "missing_portieri": missing_portieri,
-                "missing_dif": missing_dif,
-                "missing_cen": missing_cen,
-                "missing_att": missing_att,
-            })
-        conn.close()
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            svc = MarketService()
+            team_casse = svc.get_team_summaries(conn, SQUADRE, ROSE_STRUCTURE)
+            conn.close()
+        except Exception:
+            team_casse = []
     team_casse.sort(key=lambda x: x["remaining"], reverse=True)
     team_casse_missing = sorted(team_casse, key=lambda x: x["missing"])
 
@@ -586,25 +524,17 @@ def squadra(team_name):
     cur.execute('SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione FROM giocatori WHERE FantaSquadra = ? AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)', (tname,))
     rows = cur.fetchall()
     conn.close()
-    for row in rows:
-        codice = (row['ruolo'] or '').strip()
-        key = None
-        if codice:
-            ch = codice[0].upper()
-            key = ruolo_map.get(ch)
-        if not key:
-            continue
-        team_roster[key].append({'id': row['id'], 'nome': row['nome'], 'ruolo': codice, 'squadra_reale': row['squadra_reale'], 'costo': row['costo'], 'anni_contratto': row['anni_contratto'], 'opzione': row['opzione']})
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute('SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?', (tname,))
-    team_row = cur.fetchone()
-    if team_row:
-        starting_pot = float(team_row['cassa_iniziale'])
-    else:
-        starting_pot = 300.0
-    total_spent = sum([float(r['costo']) for r in rows if r['costo'] not in (None, '')])
-    cassa = starting_pot - total_spent
-    conn.close()
-    return render_template('team.html', tname=tname, roster=team_roster, rose_structure=ROSE_STRUCTURE, starting_pot=starting_pot, total_spent=total_spent, cassa=cassa, squadre=current_app.config.get('SQUADRE'))
+    if rows:
+        # If we got rows above from sqlite fallback, use the MarketService helper to compute roster and cassa
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            svc = MarketService()
+            team_roster, starting_pot, total_spent, cassa = svc.get_team_roster(conn, tname, ROSE_STRUCTURE)
+            conn.close()
+            return render_template('team.html', tname=tname, roster=team_roster, rose_structure=ROSE_STRUCTURE, starting_pot=starting_pot, total_spent=total_spent, cassa=cassa, squadre=current_app.config.get('SQUADRE'))
+        except Exception:
+            # fallback to current in-place computation if service fails
+            pass
+    # final fallback: render with computed variables (should rarely reach here)
+    return render_template('team.html', tname=tname, roster=team_roster, rose_structure=ROSE_STRUCTURE, starting_pot=300.0, total_spent=0.0, cassa=300.0, squadre=current_app.config.get('SQUADRE'))
