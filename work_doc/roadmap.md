@@ -3,6 +3,43 @@
 ## OVERVIEW
 Trasformazione da POC a prodotto industriale in 4 fasi principali con focus su sicurezza, scalabilità e qualità.
 
+## WORK DONE (fino al 17/09/2025)
+## MILESTONES & TIMELINE
+Di seguito le milestone calendarizzate per le 4 fasi principali (date basate sul 17/09/2025 come start).
+
+- Phase 1 — Foundation & Security (17/09/2025 — 11/11/2025)
+  - M1.1: Repository Hardened (17/09/2025 — 30/09/2025) — Owner: DevOps / Tech Lead
+  - M1.2: Auth & RBAC (01/10/2025 — 14/10/2025) — Owner: Backend Lead
+  - M1.3: DB Migration to PostgreSQL (15/10/2025 — 28/10/2025) — Owner: Backend + DBA
+  - M1.4: Container & Monitoring base (29/10/2025 — 11/11/2025) — Owner: DevOps
+
+- Phase 2 — Backend Refactoring (12/11/2025 — 06/01/2026)
+  - M2.1: Clean Architecture scaffold & initial refs (12/11/2025 — 25/11/2025) — Owner: Backend Lead
+  - M2.2: Core APIs & OpenAPI (26/11/2025 — 09/12/2025) — Owner: Backend
+  - M2.3: Test coverage & performance baseline (10/12/2025 — 23/12/2025) — Owner: QA
+  - Buffer/holidays (24/12/2025 — 06/01/2026)
+
+- Phase 3 — Frontend Modernization (07/01/2026 — 03/03/2026)
+  - M3.1: React + TypeScript scaffold (07/01/2026 — 20/01/2026) — Owner: Frontend Lead
+  - M3.2: UX flows & core screens (21/01/2026 — 10/02/2026) — Owner: Product + Frontend
+  - M3.3: E2E & accessibility baseline (11/02/2026 — 03/03/2026) — Owner: QA / Frontend
+
+- Phase 4 — GA, Scaling & Ops (04/03/2026 — 28/04/2026)
+  - M4.1: Staging deploy & smoke tests (04/03/2026 — 17/03/2026) — Owner: DevOps
+  - M4.2: Load testing & scaling policies (18/03/2026 — 31/03/2026) — Owner: SRE/DevOps
+  - M4.3: Go-Live readiness & launch (01/04/2026 — 28/04/2026) — Owner: Product + Tech Lead
+
+Elenco dei punti già completati e verificati:
+
+- Ambiente Python installato (Python 3.10.12) e virtualenv creato (`.venv`).
+- Dipendenze installate e `requirements.txt` aggiornato (Werkzeug < 3.0 pin per compatibilità con Flask testing).
+- Test eseguiti: smoke tests ed esecuzioni locali (2/2 tests passing).
+- Configurazione VS Code workspace per Copilot e shell integration aggiunta (`.vscode/settings.json`).
+- Shell integration manuale aggiunta in `~/.bashrc` per migliorare il rilevamento dei comandi in VS Code.
+- Documentazione creata: `work_doc/vscode_shell_integration_complete.md`.
+
+Trasformazione da POC a prodotto industriale in 4 fasi principali con focus su sicurezza, scalabilità e qualità.
+
 ---
 
 ## PHASE 1: FOUNDATION & SECURITY (Settimane 1-8)
