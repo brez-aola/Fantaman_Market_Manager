@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 import sqlite3
+from app.db import get_connection
 from openpyxl import load_workbook
 
 DB = Path("/mnt/c/work/fantacalcio/giocatori.db")
@@ -88,8 +89,8 @@ for t, lst in team_players.items():
     print(" ", t, len(lst))
 
 # Now open DB and perform inserts/updates
-conn = sqlite3.connect(str(DB))
-conn.row_factory = sqlite3.Row
+conn = get_connection(str(DB))
+ # row_factory already set by helper
 cur = conn.cursor()
 # fetch columns of giocatori
 cur.execute("PRAGMA table_info(giocatori)")

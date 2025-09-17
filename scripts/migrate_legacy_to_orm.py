@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import shutil
 import sqlite3
+from app.db import get_connection
 from pathlib import Path
 from typing import Tuple
 
@@ -92,7 +93,7 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
     copy_db(src_db, TMP_DB)
     print(f"Created temporary DB copy at: {TMP_DB}")
 
-    conn = sqlite3.connect(TMP_DB)
+    conn = get_connection(str(TMP_DB))
     teams_count, players_count = legacy_counts(conn)
     print(f"Legacy counts - teams: {teams_count}, players: {players_count}")
 

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sqlite3
 from pathlib import Path
+from app.db import get_connection
 
 DB = Path("/mnt/c/work/fantacalcio/giocatori.db")
 
@@ -8,8 +9,7 @@ if not DB.exists():
     print("Database not found at", DB)
     raise SystemExit(2)
 
-conn = sqlite3.connect(str(DB))
-conn.row_factory = sqlite3.Row
+conn = get_connection(str(DB))
 cur = conn.cursor()
 
 
