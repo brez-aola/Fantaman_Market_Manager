@@ -419,7 +419,6 @@ class MarketService:
         """
         ruolo_map = {
             "P": "Portieri",
-            "G": "Portieri",
             "D": "Difensori",
             "C": "Centrocampisti",
             "A": "Attaccanti",
@@ -436,6 +435,9 @@ class MarketService:
             key = None
             if codice:
                 ch = codice[0].upper()
+                # normalize legacy goalkeeper code 'G' to canonical 'P'
+                if ch == "G":
+                    ch = "P"
                 key = ruolo_map.get(ch)
             if not key:
                 continue
@@ -443,7 +445,8 @@ class MarketService:
                 {
                     "id": row["id"],
                     "nome": row["nome"],
-                    "ruolo": codice,
+                    # store canonical single-letter role code
+                    "ruolo": ch,
                     "squadra_reale": row["squadra_reale"],
                     "costo": row["costo"],
                     "anni_contratto": row["anni_contratto"],

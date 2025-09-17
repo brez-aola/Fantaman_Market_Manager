@@ -75,7 +75,8 @@ for r in rows[5:]:
             team_players[tname].append(
                 {
                     "Nome": name,
-                    "Ruolo": (role or "").strip() if role else "",
+                    # normalize role code: store single-letter canonical code
+                    "Ruolo": ((role or "").strip()[:1].upper().replace("G", "P")) if role else "",
                     "Sq.": (squadra_reale or "").strip() if squadra_reale else "",
                     "Costo": c,
                 }
@@ -125,7 +126,8 @@ for team, players in team_players.items():
                 "anni_contratto": 1,
                 "opzione": "NO",
                 "Sq.": sqreal,
-                "R.": ruolo,
+                # ensure canonical single-letter role (convert 'G'->'P' and keep first char)
+                "R.": (ruolo[:1].upper().replace("G", "P") if ruolo else ""),
             }
             set_clause = ", ".join([f'"{k}" = ?' for k in updates.keys()])
             params = list(updates.values()) + [rowid]
@@ -140,7 +142,7 @@ for team, players in team_players.items():
             for k, v in [
                 ("Nome", nome),
                 ("Sq.", sqreal),
-                ("R.", ruolo),
+                ("R.", (ruolo[:1].upper().replace("G", "P") if ruolo else "")),
                 ("Costo", costo),
                 ("squadra", team),
                 ("anni_contratto", 1),

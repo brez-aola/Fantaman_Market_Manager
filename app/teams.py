@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, current_app
 from app.db import get_connection
+from app.services.market_service import MarketService
 
 bp = Blueprint("teams", __name__, url_prefix="/teams")
 
@@ -10,7 +11,6 @@ def team_page(team_name):
     DB_PATH = current_app.config.get("DB_PATH")
     ruolo_map = {
         "P": "Portieri",
-        "G": "Portieri",
         "D": "Difensori",
         "C": "Centrocampisti",
         "A": "Attaccanti",
@@ -39,6 +39,9 @@ def team_page(team_name):
                     key = None
                     if codice:
                         ch = codice[0].upper()
+                        # normalize legacy 'G' (goalkeeper) to canonical 'P'
+                        if ch == "G":
+                            ch = "P"
                         key = ruolo_map.get(ch)
                     if not key:
                         continue
@@ -46,7 +49,8 @@ def team_page(team_name):
                         {
                             "id": p.id,
                             "nome": p.name,
-                            "ruolo": p.role,
+                            # store canonical single-letter role
+                            "ruolo": ch,
                             "squadra_reale": None,
                             "costo": getattr(p, "costo", None),
                             "anni_contratto": getattr(p, "anni_contratto", None),

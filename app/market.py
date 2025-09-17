@@ -52,7 +52,7 @@ def index():
         sql += " AND ruolo LIKE ?"
         params.append(f"%{ruolo}%")
     role_map = {
-        "Portieri": ["P", "G"],
+        "Portieri": ["P"],
         "Difensori": ["D"],
         "Centrocampisti": ["C"],
         "Attaccanti": ["A"],
@@ -267,8 +267,12 @@ def index():
                             costo_val = 0.0
                         spent += costo_val
                         rcode = (p.role or "")[:1].upper() if p.role else ""
+                            # normalize legacy goalkeeper code 'G' to 'P'
+                        if rcode == "G":
+                            rcode = "P"
                         counts[rcode] = counts.get(rcode, 0) + 1
-                    portieri_count = int(counts.get("P", 0)) + int(counts.get("G", 0))
+                        # goalkeeper counts: 'G' treated as 'P' if present in DB
+                        portieri_count = int(counts.get("P", 0)) + int(counts.get("G", 0))
                     dif_count = int(counts.get("D", 0))
                     cen_count = int(counts.get("C", 0))
                     att_count = int(counts.get("A", 0))
@@ -440,7 +444,6 @@ def rose():
     ROSE_STRUCTURE = current_app.config.get("ROSE_STRUCTURE")
     ruolo_map = {
         "P": "Portieri",
-        "G": "Portieri",
         "D": "Difensori",
         "C": "Centrocampisti",
         "A": "Attaccanti",
@@ -490,6 +493,8 @@ def rose():
             key = None
             if codice_ruolo:
                 ch = codice_ruolo[0].upper()
+                if ch == "G":
+                    ch = "P"
                 key = ruolo_map.get(ch)
             if not key:
                 continue
@@ -561,7 +566,6 @@ def squadra(team_name):
     # prefer ORM if available
     ruolo_map = {
         "P": "Portieri",
-        "G": "Portieri",
         "D": "Difensori",
         "C": "Centrocampisti",
         "A": "Attaccanti",
@@ -588,6 +592,8 @@ def squadra(team_name):
                     key = None
                     if codice:
                         ch = codice[0].upper()
+                        if ch == "G":
+                            ch = "P"
                         key = ruolo_map.get(ch)
                     if not key:
                         continue
@@ -595,7 +601,8 @@ def squadra(team_name):
                         {
                             "id": p.id,
                             "nome": p.name,
-                            "ruolo": p.role,
+                            # store canonical single-letter role
+                            "ruolo": ch,
                             "squadra_reale": None,
                             "costo": getattr(p, "costo", None),
                             "anni_contratto": getattr(p, "anni_contratto", None),
