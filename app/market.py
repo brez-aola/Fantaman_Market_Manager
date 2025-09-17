@@ -1,5 +1,4 @@
 from flask import Blueprint, render_template, current_app, request
-import sqlite3
 from app.db import get_connection
 from flask import redirect, jsonify
 import urllib.parse

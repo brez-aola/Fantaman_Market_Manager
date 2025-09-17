@@ -1,5 +1,4 @@
 from flask import Blueprint, render_template, current_app
-import sqlite3
 from app.db import get_connection
 
 bp = Blueprint("teams", __name__, url_prefix="/teams")

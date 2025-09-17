@@ -1,6 +1,5 @@
 from flask import Flask, render_template_string, request, jsonify
 import urllib.parse
-import sqlite3
 import os
 from app.db import get_connection
 from app.services.market_service import MarketService

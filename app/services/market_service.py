@@ -255,8 +255,16 @@ class MarketService:
             params = query_variants + [limit]
             cur.execute(suggestion_sql, params)
             rows = cur.fetchall()
+            # Normalize query for comparison so we don't return an exact case-insensitive match
+            q_norm = query.strip().lower()
             for r in rows:
-                suggestions.append(r[0])
+                name = r[0]
+                if not name:
+                    continue
+                # skip exact case-insensitive match
+                if name.strip().lower() == q_norm:
+                    continue
+                suggestions.append(name)
         except Exception:
             return []
         return suggestions
