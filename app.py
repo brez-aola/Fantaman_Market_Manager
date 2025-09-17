@@ -89,6 +89,7 @@ def get_team_cash(conn, team):
     Kept as a thin wrapper to preserve existing call sites in this module.
     """
     import warnings
+
     warnings.warn(
         "get_team_cash is deprecated here; use MarketService.get_team_cash instead",
         DeprecationWarning,
@@ -100,6 +101,7 @@ def get_team_cash(conn, team):
 
 def update_team_cash(conn, team, new_attuale):
     import warnings
+
     warnings.warn(
         "update_team_cash is deprecated here; use MarketService.update_team_cash instead",
         DeprecationWarning,
@@ -111,6 +113,7 @@ def update_team_cash(conn, team, new_attuale):
 
 def atomic_charge_team(conn, team, amount):
     import warnings
+
     warnings.warn(
         "atomic_charge_team is deprecated here; use MarketService.atomic_charge_team instead",
         DeprecationWarning,
@@ -122,6 +125,7 @@ def atomic_charge_team(conn, team, amount):
 
 def refund_team(conn, team, amount):
     import warnings
+
     warnings.warn(
         "refund_team is deprecated here; use MarketService.refund_team instead",
         DeprecationWarning,
@@ -893,6 +897,7 @@ def assegna_giocatore():
 
     # Delegate to blueprint implementation to keep a single source of truth for market routes
     from app.market import assegna_giocatore as bp_assegna
+
     return bp_assegna()
 
 
@@ -976,6 +981,7 @@ TEAM_HTML = """
 def squadra(team_name):
     # Delegate to blueprint implementation for team page rendering
     from app.market import squadra as bp_squadra
+
     return bp_squadra(team_name)
 
 

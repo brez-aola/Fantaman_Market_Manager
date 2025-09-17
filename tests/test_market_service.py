@@ -56,9 +56,15 @@ def test_assign_player_insufficient_funds():
     try:
         cur = conn.cursor()
         # create team with small balance
-        cur.execute("INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)", ("PoorTeam", 0, 100.0, 10.0))
+        cur.execute(
+            "INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)",
+            ("PoorTeam", 0, 100.0, 10.0),
+        )
         # create a player row
-        cur.execute("INSERT INTO giocatori(Nome, Costo, squadra) VALUES (?,?,?)", ("Mario", 0.0, None))
+        cur.execute(
+            "INSERT INTO giocatori(Nome, Costo, squadra) VALUES (?,?,?)",
+            ("Mario", 0.0, None),
+        )
         pid = cur.lastrowid
         conn.commit()
         res = svc.assign_player(conn, pid, "PoorTeam", 50, 1, "SI")
@@ -75,10 +81,19 @@ def test_assign_and_move_refunds():
     try:
         cur = conn.cursor()
         # create two teams
-        cur.execute("INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)", ("TeamOld", 0, 300.0, 100.0))
-        cur.execute("INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)", ("TeamNew", 0, 300.0, 300.0))
+        cur.execute(
+            "INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)",
+            ("TeamOld", 0, 300.0, 100.0),
+        )
+        cur.execute(
+            "INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)",
+            ("TeamNew", 0, 300.0, 300.0),
+        )
         # create player assigned to TeamOld with cost 20
-        cur.execute("INSERT INTO giocatori(Nome, Costo, squadra) VALUES (?,?,?)", ("Luigi", 20.0, "TeamOld"))
+        cur.execute(
+            "INSERT INTO giocatori(Nome, Costo, squadra) VALUES (?,?,?)",
+            ("Luigi", 20.0, "TeamOld"),
+        )
         pid = cur.lastrowid
         conn.commit()
         # move player to TeamNew with cost 30
@@ -99,8 +114,14 @@ def test_unassign_refunds():
     conn = setup_memory_db()
     try:
         cur = conn.cursor()
-        cur.execute("INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)", ("TeamX", 0, 300.0, 250.0))
-        cur.execute("INSERT INTO giocatori(Nome, Costo, squadra) VALUES (?,?,?)", ("Peach", 50.0, "TeamX"))
+        cur.execute(
+            "INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)",
+            ("TeamX", 0, 300.0, 250.0),
+        )
+        cur.execute(
+            "INSERT INTO giocatori(Nome, Costo, squadra) VALUES (?,?,?)",
+            ("Peach", 50.0, "TeamX"),
+        )
         pid = cur.lastrowid
         conn.commit()
         # unassign player (squadra=None) -> refund 50

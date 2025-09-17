@@ -7,14 +7,19 @@ from sqlalchemy.orm import sessionmaker
 def create_app(test_config=None):
     app = Flask(
         __name__,
-        template_folder=os.path.join(os.path.dirname(__file__), '..', 'templates'),
-        static_folder=os.path.join(os.path.dirname(__file__), '..', 'static'),
+        template_folder=os.path.join(os.path.dirname(__file__), "..", "templates"),
+        static_folder=os.path.join(os.path.dirname(__file__), "..", "static"),
     )
 
     # default config
     app.config.from_mapping(
-        DB_PATH=os.path.join(os.path.dirname(__file__), '..', 'giocatori.db'),
-        ROSE_STRUCTURE={"Portieri": 3, "Difensori": 8, "Centrocampisti": 8, "Attaccanti": 6},
+        DB_PATH=os.path.join(os.path.dirname(__file__), "..", "giocatori.db"),
+        ROSE_STRUCTURE={
+            "Portieri": 3,
+            "Difensori": 8,
+            "Centrocampisti": 8,
+            "Attaccanti": 6,
+        },
         SQUADRE=[
             "FC Bioparco",
             "Nova Spes",
@@ -33,15 +38,20 @@ def create_app(test_config=None):
         app.config.update(test_config)
 
     # configure SQLAlchemy engine/session
-    db_path = app.config.get('DB_PATH')
-    db_uri = app.config.get('SQLALCHEMY_DATABASE_URI') or f"sqlite:///{db_path}"
-    engine = create_engine(db_uri, connect_args={"check_same_thread": False} if db_uri.startswith('sqlite') else {})
+    db_path = app.config.get("DB_PATH")
+    db_uri = app.config.get("SQLALCHEMY_DATABASE_URI") or f"sqlite:///{db_path}"
+    engine = create_engine(
+        db_uri,
+        connect_args=(
+            {"check_same_thread": False} if db_uri.startswith("sqlite") else {}
+        ),
+    )
     SessionLocal = sessionmaker(bind=engine)
 
     # attach to app for other modules to use
-    app.extensions = getattr(app, 'extensions', {})
-    app.extensions['db_engine'] = engine
-    app.extensions['db_session_factory'] = SessionLocal
+    app.extensions = getattr(app, "extensions", {})
+    app.extensions["db_engine"] = engine
+    app.extensions["db_session_factory"] = SessionLocal
 
     # register blueprints
     try:

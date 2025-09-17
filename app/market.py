@@ -126,8 +126,10 @@ def index():
     # Sorting
     sort_by = request.args.get("sort_by", "").strip()
     sort_dir = request.args.get("sort_dir", "asc").lower()
+
     def q(colname):
         return f'"{colname}"'
+
     allowed_sorts = {}
     if "Nome" in columns:
         allowed_sorts["nome"] = q("Nome")
@@ -153,7 +155,11 @@ def index():
         if "quot" in cl and "quot" not in allowed_sorts:
             allowed_sorts["quot"] = q(c)
             quot_col = c
-        if "pg" in cl and "pgv" not in allowed_sorts and cl.replace(".", "").startswith("pg"):
+        if (
+            "pg" in cl
+            and "pgv" not in allowed_sorts
+            and cl.replace(".", "").startswith("pg")
+        ):
             allowed_sorts.setdefault("pgv", q(c))
 
     base_args = request.args.to_dict(flat=False)
@@ -212,7 +218,12 @@ def index():
             svc = MarketService()
             suggestion_results = svc.get_name_suggestions(conn, query, limit=8)
             for name in suggestion_results:
-                if not any(r.get("Nome") == name for r in results if "Nome" in r.keys()) and name.lower() != query.lower():
+                if (
+                    not any(
+                        r.get("Nome") == name for r in results if "Nome" in r.keys()
+                    )
+                    and name.lower() != query.lower()
+                ):
                     suggestions.append(name)
             conn.close()
         except Exception:
@@ -221,7 +232,7 @@ def index():
     # compute team summaries: prefer ORM if available, otherwise fall back to sqlite3
     team_casse = []
     try:
-        SessionLocal = current_app.extensions.get('db_session_factory')
+        SessionLocal = current_app.extensions.get("db_session_factory")
         if SessionLocal:
             session = SessionLocal()
             try:
@@ -229,7 +240,11 @@ def index():
 
                 for s in SQUADRE:
                     team_obj = session.query(Team).filter(Team.name == s).first()
-                    starting = float(team_obj.cash) if team_obj and team_obj.cash is not None else 300.0
+                    starting = (
+                        float(team_obj.cash)
+                        if team_obj and team_obj.cash is not None
+                        else 300.0
+                    )
                     # sum costs of players assigned to this team
                     spent = 0.0
                     counts = {}
@@ -238,37 +253,51 @@ def index():
                         players = team_obj.players
                     else:
                         # no Team row, try to find Player.team by name match
-                        players = session.query(Player).filter(Player.team_id.isnot(None)).all()
+                        players = (
+                            session.query(Player)
+                            .filter(Player.team_id.isnot(None))
+                            .all()
+                        )
                         players = [p for p in players if p.team and p.team.name == s]
                     for p in players:
                         # p may not have a numeric cost field in ORM model; ignore cost unless custom attribute exists
                         try:
-                            costo_val = float(getattr(p, 'costo', 0) or 0)
+                            costo_val = float(getattr(p, "costo", 0) or 0)
                         except Exception:
                             costo_val = 0.0
                         spent += costo_val
-                        rcode = (p.role or '')[:1].upper() if p.role else ''
+                        rcode = (p.role or "")[:1].upper() if p.role else ""
                         counts[rcode] = counts.get(rcode, 0) + 1
-                    portieri_count = int(counts.get('P', 0)) + int(counts.get('G', 0))
-                    dif_count = int(counts.get('D', 0))
-                    cen_count = int(counts.get('C', 0))
-                    att_count = int(counts.get('A', 0))
-                    missing_portieri = max(0, ROSE_STRUCTURE.get('Portieri', 0) - portieri_count)
-                    missing_dif = max(0, ROSE_STRUCTURE.get('Difensori', 0) - dif_count)
-                    missing_cen = max(0, ROSE_STRUCTURE.get('Centrocampisti', 0) - cen_count)
-                    missing_att = max(0, ROSE_STRUCTURE.get('Attaccanti', 0) - att_count)
-                    missing_total = missing_portieri + missing_dif + missing_cen + missing_att
-                    team_casse.append({
-                        'squadra': s,
-                        'starting': starting,
-                        'spent': spent,
-                        'remaining': starting - spent,
-                        'missing': missing_total,
-                        'missing_portieri': missing_portieri,
-                        'missing_dif': missing_dif,
-                        'missing_cen': missing_cen,
-                        'missing_att': missing_att,
-                    })
+                    portieri_count = int(counts.get("P", 0)) + int(counts.get("G", 0))
+                    dif_count = int(counts.get("D", 0))
+                    cen_count = int(counts.get("C", 0))
+                    att_count = int(counts.get("A", 0))
+                    missing_portieri = max(
+                        0, ROSE_STRUCTURE.get("Portieri", 0) - portieri_count
+                    )
+                    missing_dif = max(0, ROSE_STRUCTURE.get("Difensori", 0) - dif_count)
+                    missing_cen = max(
+                        0, ROSE_STRUCTURE.get("Centrocampisti", 0) - cen_count
+                    )
+                    missing_att = max(
+                        0, ROSE_STRUCTURE.get("Attaccanti", 0) - att_count
+                    )
+                    missing_total = (
+                        missing_portieri + missing_dif + missing_cen + missing_att
+                    )
+                    team_casse.append(
+                        {
+                            "squadra": s,
+                            "starting": starting,
+                            "spent": spent,
+                            "remaining": starting - spent,
+                            "missing": missing_total,
+                            "missing_portieri": missing_portieri,
+                            "missing_dif": missing_dif,
+                            "missing_cen": missing_cen,
+                            "missing_att": missing_att,
+                        }
+                    )
             finally:
                 session.close()
     except Exception:
@@ -314,18 +343,18 @@ def index():
     )
 
 
-@bp.route('/assegna_giocatore', methods=['POST'])
+@bp.route("/assegna_giocatore", methods=["POST"])
 def assegna_giocatore():
-    DB_PATH = current_app.config.get('DB_PATH')
-    id = request.form.get('id')
-    squadra = request.form.get('squadra')
-    costo = request.form.get('costo')
-    anni_contratto = request.form.get('anni_contratto')
-    opzione = 'SI' if request.form.get('opzione') == 'on' else 'NO'
+    DB_PATH = current_app.config.get("DB_PATH")
+    id = request.form.get("id")
+    squadra = request.form.get("squadra")
+    costo = request.form.get("costo")
+    anni_contratto = request.form.get("anni_contratto")
+    opzione = "SI" if request.form.get("opzione") == "on" else "NO"
     service = MarketService()
     # re-use service validation; keep canonical team check from app config
     error_msg = service.validate_player_assignment(id, squadra, costo, anni_contratto)
-    if squadra and squadra not in current_app.config.get('SQUADRE'):
+    if squadra and squadra not in current_app.config.get("SQUADRE"):
         error_msg = "Squadra selezionata non valida."
     if error_msg:
         return (error_msg, 400)
@@ -333,46 +362,62 @@ def assegna_giocatore():
     conn = get_connection(DB_PATH)
     try:
         res = service.assign_player(conn, id, squadra, costo, anni_contratto, opzione)
-        if not res.get('success'):
-            avail = res.get('available')
+        if not res.get("success"):
+            avail = res.get("available")
             if avail is None:
                 avail = 300.0
             needed = 0.0
             try:
-                needed = float(str(costo).replace(",", "").replace("€", "").strip()) if costo not in (None, "") else 0.0
+                needed = (
+                    float(str(costo).replace(",", "").replace("€", "").strip())
+                    if costo not in (None, "")
+                    else 0.0
+                )
             except Exception:
                 needed = 0.0
-            return (f'Fondi insufficienti per assegnare (costo: {needed} > disponibile: {avail}).', 400)
+            return (
+                f"Fondi insufficienti per assegnare (costo: {needed} > disponibile: {avail}).",
+                400,
+            )
     finally:
         conn.close()
 
-    return redirect('/')
+    return redirect("/")
 
 
-@bp.route('/update_player', methods=['POST'])
+@bp.route("/update_player", methods=["POST"])
 def update_player():
-    DB_PATH = current_app.config.get('DB_PATH')
+    DB_PATH = current_app.config.get("DB_PATH")
     data = request.get_json() or {}
-    pid = data.get('id')
-    squadra = data.get('squadra')
-    costo = data.get('costo')
-    anni_contratto = data.get('anni_contratto')
-    opzione = data.get('opzione')
+    pid = data.get("id")
+    squadra = data.get("squadra")
+    costo = data.get("costo")
+    anni_contratto = data.get("anni_contratto")
+    opzione = data.get("opzione")
     error_msg = None
     if not pid or not str(pid).isdigit():
-        error_msg = 'ID giocatore non valido.'
-    if squadra and squadra not in current_app.config.get('SQUADRE'):
-        error_msg = 'Squadra selezionata non valida.'
+        error_msg = "ID giocatore non valido."
+    if squadra and squadra not in current_app.config.get("SQUADRE"):
+        error_msg = "Squadra selezionata non valida."
     try:
-        costo_val = float(str(costo).replace(",", "").replace("€", "").strip()) if costo not in (None, "") else 0.0
+        costo_val = (
+            float(str(costo).replace(",", "").replace("€", "").strip())
+            if costo not in (None, "")
+            else 0.0
+        )
         if costo_val < 0 or costo_val > 1000:
-            error_msg = 'Il costo deve essere tra 0 e 1000.'
+            error_msg = "Il costo deve essere tra 0 e 1000."
     except Exception:
-        error_msg = 'Costo non valido.'
-    if anni_contratto and str(anni_contratto) not in ['1','2','3']:
-        error_msg = 'Anni contratto non valido.'
+        error_msg = "Costo non valido."
+    if anni_contratto and str(anni_contratto) not in ["1", "2", "3"]:
+        error_msg = "Anni contratto non valido."
     if error_msg:
-        return (jsonify({'error': error_msg, 'help':'Controlla i dati inseriti e riprova.'}), 400)
+        return (
+            jsonify(
+                {"error": error_msg, "help": "Controlla i dati inseriti e riprova."}
+            ),
+            400,
+        )
     # delegate to MarketService for the heavy lifting
     service = MarketService()
     # normalize empty team -> None behavior inside service
@@ -380,7 +425,7 @@ def update_player():
     try:
         res = service.update_player(conn, pid, squadra, costo, anni_contratto, opzione)
         # service returns either an updated row dict or an error mapping
-        if isinstance(res, dict) and res.get('error'):
+        if isinstance(res, dict) and res.get("error"):
             # keep previous JSON error shape
             return (jsonify(res), 400)
         return jsonify(res)
@@ -388,17 +433,23 @@ def update_player():
         conn.close()
 
 
-@bp.route('/rose', methods=['GET'])
+@bp.route("/rose", methods=["GET"])
 def rose():
-    DB_PATH = current_app.config.get('DB_PATH')
+    DB_PATH = current_app.config.get("DB_PATH")
     # Prefer ORM data if present; fall back to legacy sqlite3 queries when needed
-    ROSE_STRUCTURE = current_app.config.get('ROSE_STRUCTURE')
-    ruolo_map = {"P": "Portieri", "G": "Portieri", "D": "Difensori", "C": "Centrocampisti", "A": "Attaccanti"}
+    ROSE_STRUCTURE = current_app.config.get("ROSE_STRUCTURE")
+    ruolo_map = {
+        "P": "Portieri",
+        "G": "Portieri",
+        "D": "Difensori",
+        "C": "Centrocampisti",
+        "A": "Attaccanti",
+    }
 
     # attempt ORM query
     orm_rows = []
     try:
-        SessionLocal = current_app.extensions.get('db_session_factory')
+        SessionLocal = current_app.extensions.get("db_session_factory")
         if SessionLocal:
             session = SessionLocal()
             try:
@@ -408,28 +459,34 @@ def rose():
                 qs = session.query(Player).filter(Player.team_id.isnot(None)).all()
                 for p in qs:
                     team = p.team.name if p.team is not None else None
-                    orm_rows.append({
-                        'id': p.id,
-                        'nome': p.name,
-                        'ruolo': p.role,
-                        'squadra_reale': None,
-                        'costo': None,
-                        'anni_contratto': None,
-                        'opzione': None,
-                        'FantaSquadra': team,
-                    })
+                    orm_rows.append(
+                        {
+                            "id": p.id,
+                            "nome": p.name,
+                            "ruolo": p.role,
+                            "squadra_reale": None,
+                            "costo": None,
+                            "anni_contratto": None,
+                            "opzione": None,
+                            "FantaSquadra": team,
+                        }
+                    )
             finally:
                 session.close()
     except Exception:
         orm_rows = []
 
     if orm_rows:
-        teams_in_rows = {r['FantaSquadra'] for r in orm_rows if r['FantaSquadra']}
-        all_teams = list(dict.fromkeys(list(current_app.config.get('SQUADRE')) + sorted(teams_in_rows)))
+        teams_in_rows = {r["FantaSquadra"] for r in orm_rows if r["FantaSquadra"]}
+        all_teams = list(
+            dict.fromkeys(
+                list(current_app.config.get("SQUADRE")) + sorted(teams_in_rows)
+            )
+        )
         rose_map = {s: {r: [] for r in ROSE_STRUCTURE.keys()} for s in all_teams}
         for row in orm_rows:
-            sname = row['FantaSquadra']
-            codice_ruolo = (row.get('ruolo') or '').strip()
+            sname = row["FantaSquadra"]
+            codice_ruolo = (row.get("ruolo") or "").strip()
             key = None
             if codice_ruolo:
                 ch = codice_ruolo[0].upper()
@@ -437,27 +494,41 @@ def rose():
             if not key:
                 continue
             if sname in rose_map:
-                rose_map[sname][key].append({
-                    'id': row['id'], 'nome': row['nome'], 'ruolo': codice_ruolo, 'squadra_reale': row.get('squadra_reale'), 'costo': row.get('costo'), 'anni_contratto': row.get('anni_contratto'), 'opzione': row.get('opzione')
-                })
-        return render_template('rose.html', squadre=all_teams, rose_structure=ROSE_STRUCTURE, rose=rose_map)
+                rose_map[sname][key].append(
+                    {
+                        "id": row["id"],
+                        "nome": row["nome"],
+                        "ruolo": codice_ruolo,
+                        "squadra_reale": row.get("squadra_reale"),
+                        "costo": row.get("costo"),
+                        "anni_contratto": row.get("anni_contratto"),
+                        "opzione": row.get("opzione"),
+                    }
+                )
+        return render_template(
+            "rose.html", squadre=all_teams, rose_structure=ROSE_STRUCTURE, rose=rose_map
+        )
 
     # fallback: legacy sqlite3 logic
     conn = get_connection(DB_PATH)
     cur = conn.cursor()
-    cur.execute('''SELECT rowid AS id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, FantaSquadra
+    cur.execute(
+        """SELECT rowid AS id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, FantaSquadra
         FROM giocatori
         WHERE FantaSquadra IS NOT NULL
         AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)
-    ''')
+    """
+    )
     rows = cur.fetchall()
     conn.close()
-    teams_in_rows = {row['FantaSquadra'] for row in rows if row['FantaSquadra']}
-    all_teams = list(dict.fromkeys(list(current_app.config.get('SQUADRE')) + sorted(teams_in_rows)))
+    teams_in_rows = {row["FantaSquadra"] for row in rows if row["FantaSquadra"]}
+    all_teams = list(
+        dict.fromkeys(list(current_app.config.get("SQUADRE")) + sorted(teams_in_rows))
+    )
     rose_map = {s: {r: [] for r in ROSE_STRUCTURE.keys()} for s in all_teams}
     for row in rows:
-        sname = row['FantaSquadra']
-        codice_ruolo = (row['ruolo'] or '').strip()
+        sname = row["FantaSquadra"]
+        codice_ruolo = (row["ruolo"] or "").strip()
         key = None
         if codice_ruolo:
             ch = codice_ruolo[0].upper()
@@ -465,23 +536,40 @@ def rose():
         if not key:
             continue
         if sname in rose_map:
-            rose_map[sname][key].append({
-                'id': row['id'], 'nome': row['nome'], 'ruolo': codice_ruolo, 'squadra_reale': row['squadra_reale'], 'costo': row['costo'], 'anni_contratto': row['anni_contratto'], 'opzione': row['opzione']
-            })
-    return render_template('rose.html', squadre=all_teams, rose_structure=ROSE_STRUCTURE, rose=rose_map)
+            rose_map[sname][key].append(
+                {
+                    "id": row["id"],
+                    "nome": row["nome"],
+                    "ruolo": codice_ruolo,
+                    "squadra_reale": row["squadra_reale"],
+                    "costo": row["costo"],
+                    "anni_contratto": row["anni_contratto"],
+                    "opzione": row["opzione"],
+                }
+            )
+    return render_template(
+        "rose.html", squadre=all_teams, rose_structure=ROSE_STRUCTURE, rose=rose_map
+    )
 
 
-@bp.route('/squadra/<team_name>', methods=['GET'])
+@bp.route("/squadra/<team_name>", methods=["GET"])
 def squadra(team_name):
     from urllib.parse import unquote
+
     tname = unquote(team_name)
-    DB_PATH = current_app.config.get('DB_PATH')
+    DB_PATH = current_app.config.get("DB_PATH")
     # prefer ORM if available
-    ruolo_map = {"P": "Portieri", "G": "Portieri", "D": "Difensori", "C": "Centrocampisti", "A": "Attaccanti"}
-    ROSE_STRUCTURE = current_app.config.get('ROSE_STRUCTURE')
+    ruolo_map = {
+        "P": "Portieri",
+        "G": "Portieri",
+        "D": "Difensori",
+        "C": "Centrocampisti",
+        "A": "Attaccanti",
+    }
+    ROSE_STRUCTURE = current_app.config.get("ROSE_STRUCTURE")
     team_roster = {r: [] for r in ROSE_STRUCTURE.keys()}
     try:
-        SessionLocal = current_app.extensions.get('db_session_factory')
+        SessionLocal = current_app.extensions.get("db_session_factory")
         if SessionLocal:
             session = SessionLocal()
             try:
@@ -491,21 +579,46 @@ def squadra(team_name):
                 if team_obj:
                     players = team_obj.players
                 else:
-                    players = session.query(Player).filter(Player.team_id.isnot(None)).all()
+                    players = (
+                        session.query(Player).filter(Player.team_id.isnot(None)).all()
+                    )
                     players = [p for p in players if p.team and p.team.name == tname]
                 for p in players:
-                    codice = (p.role or '').strip()
+                    codice = (p.role or "").strip()
                     key = None
                     if codice:
                         ch = codice[0].upper()
                         key = ruolo_map.get(ch)
                     if not key:
                         continue
-                    team_roster[key].append({'id': p.id, 'nome': p.name, 'ruolo': p.role, 'squadra_reale': None, 'costo': getattr(p, 'costo', None), 'anni_contratto': getattr(p, 'anni_contratto', None), 'opzione': getattr(p, 'opzione', None)})
-                starting_pot = float(team_obj.cash) if team_obj and team_obj.cash is not None else 300.0
-                total_spent = sum([float(getattr(p, 'costo', 0) or 0) for p in players])
+                    team_roster[key].append(
+                        {
+                            "id": p.id,
+                            "nome": p.name,
+                            "ruolo": p.role,
+                            "squadra_reale": None,
+                            "costo": getattr(p, "costo", None),
+                            "anni_contratto": getattr(p, "anni_contratto", None),
+                            "opzione": getattr(p, "opzione", None),
+                        }
+                    )
+                starting_pot = (
+                    float(team_obj.cash)
+                    if team_obj and team_obj.cash is not None
+                    else 300.0
+                )
+                total_spent = sum([float(getattr(p, "costo", 0) or 0) for p in players])
                 cassa = starting_pot - total_spent
-                return render_template('team.html', tname=tname, roster=team_roster, rose_structure=ROSE_STRUCTURE, starting_pot=starting_pot, total_spent=total_spent, cassa=cassa, squadre=current_app.config.get('SQUADRE'))
+                return render_template(
+                    "team.html",
+                    tname=tname,
+                    roster=team_roster,
+                    rose_structure=ROSE_STRUCTURE,
+                    starting_pot=starting_pot,
+                    total_spent=total_spent,
+                    cassa=cassa,
+                    squadre=current_app.config.get("SQUADRE"),
+                )
             finally:
                 session.close()
     except Exception:
@@ -514,7 +627,10 @@ def squadra(team_name):
 
     conn = get_connection(DB_PATH)
     cur = conn.cursor()
-    cur.execute('SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione FROM giocatori WHERE FantaSquadra = ? AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)', (tname,))
+    cur.execute(
+        'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione FROM giocatori WHERE FantaSquadra = ? AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)',
+        (tname,),
+    )
     rows = cur.fetchall()
     conn.close()
     if rows:
@@ -522,11 +638,31 @@ def squadra(team_name):
         try:
             conn = get_connection(DB_PATH)
             svc = MarketService()
-            team_roster, starting_pot, total_spent, cassa = svc.get_team_roster(conn, tname, ROSE_STRUCTURE)
+            team_roster, starting_pot, total_spent, cassa = svc.get_team_roster(
+                conn, tname, ROSE_STRUCTURE
+            )
             conn.close()
-            return render_template('team.html', tname=tname, roster=team_roster, rose_structure=ROSE_STRUCTURE, starting_pot=starting_pot, total_spent=total_spent, cassa=cassa, squadre=current_app.config.get('SQUADRE'))
+            return render_template(
+                "team.html",
+                tname=tname,
+                roster=team_roster,
+                rose_structure=ROSE_STRUCTURE,
+                starting_pot=starting_pot,
+                total_spent=total_spent,
+                cassa=cassa,
+                squadre=current_app.config.get("SQUADRE"),
+            )
         except Exception:
             # fallback to current in-place computation if service fails
             pass
     # final fallback: render with computed variables (should rarely reach here)
-    return render_template('team.html', tname=tname, roster=team_roster, rose_structure=ROSE_STRUCTURE, starting_pot=300.0, total_spent=0.0, cassa=300.0, squadre=current_app.config.get('SQUADRE'))
+    return render_template(
+        "team.html",
+        tname=tname,
+        roster=team_roster,
+        rose_structure=ROSE_STRUCTURE,
+        starting_pot=300.0,
+        total_spent=0.0,
+        cassa=300.0,
+        squadre=current_app.config.get("SQUADRE"),
+    )

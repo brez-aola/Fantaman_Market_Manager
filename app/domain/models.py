@@ -6,7 +6,7 @@ from typing import Optional, List
 class Team:
     id: int
     name: str
-    players: List['Player'] = field(default_factory=list)
+    players: List["Player"] = field(default_factory=list)
 
 
 @dataclass

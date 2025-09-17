@@ -90,7 +90,7 @@ for t, lst in team_players.items():
 
 # Now open DB and perform inserts/updates
 conn = get_connection(str(DB))
- # row_factory already set by helper
+# row_factory already set by helper
 cur = conn.cursor()
 # fetch columns of giocatori
 cur.execute("PRAGMA table_info(giocatori)")

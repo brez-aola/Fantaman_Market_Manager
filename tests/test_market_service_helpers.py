@@ -40,7 +40,7 @@ def test_get_name_suggestions_and_safety():
         cur = conn.cursor()
         names = ["Mario Rossi", "Marino Rosso", "Marco Verdi", "Marco Rossi"]
         for n in names:
-            cur.execute('INSERT INTO giocatori(Nome) VALUES (?)', (n,))
+            cur.execute("INSERT INTO giocatori(Nome) VALUES (?)", (n,))
         conn.commit()
 
         # query 'Mar' should return suggestions including 'Mario Rossi' and 'Marco Rossi' etc.
@@ -62,8 +62,14 @@ def test_get_team_summaries_and_roster():
         setup_schema(conn)
         cur = conn.cursor()
         # create two teams with fantateam rows
-        cur.execute("INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)", ("TeamA", 0, 300.0, 250.0))
-        cur.execute("INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)", ("TeamB", 0, 300.0, 300.0))
+        cur.execute(
+            "INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)",
+            ("TeamA", 0, 300.0, 250.0),
+        )
+        cur.execute(
+            "INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)",
+            ("TeamB", 0, 300.0, 300.0),
+        )
 
         # add players assigned to teams
         players = [
@@ -72,22 +78,32 @@ def test_get_team_summaries_and_roster():
             ("C1", "", "TeamB", "C", 15.0, 1, "NO", "TeamB"),
         ]
         for p in players:
-            cur.execute('INSERT INTO giocatori(Nome, "Sq.", squadra, "R.", "Costo", anni_contratto, opzione, FantaSquadra) VALUES (?,?,?,?,?,?,?,?)', p)
+            cur.execute(
+                'INSERT INTO giocatori(Nome, "Sq.", squadra, "R.", "Costo", anni_contratto, opzione, FantaSquadra) VALUES (?,?,?,?,?,?,?,?)',
+                p,
+            )
         conn.commit()
 
         squadre = ["TeamA", "TeamB"]
-        rose_structure = {"Portieri": 1, "Difensori": 1, "Centrocampisti": 1, "Attaccanti": 1}
+        rose_structure = {
+            "Portieri": 1,
+            "Difensori": 1,
+            "Centrocampisti": 1,
+            "Attaccanti": 1,
+        }
 
         summaries = svc.get_team_summaries(conn, squadre, rose_structure)
         # Both teams should be present in summaries
-        assert any(s['squadra'] == 'TeamA' for s in summaries)
-        assert any(s['squadra'] == 'TeamB' for s in summaries)
+        assert any(s["squadra"] == "TeamA" for s in summaries)
+        assert any(s["squadra"] == "TeamB" for s in summaries)
 
         # Test roster helper for TeamA
-        roster, starting, total_spent, cassa = svc.get_team_roster(conn, 'TeamA', rose_structure)
+        roster, starting, total_spent, cassa = svc.get_team_roster(
+            conn, "TeamA", rose_structure
+        )
         assert starting == 300.0 or starting == 250.0 or isinstance(starting, float)
         # roster should contain Portieri and Difensori keys
-        assert 'Portieri' in roster and 'Difensori' in roster
+        assert "Portieri" in roster and "Difensori" in roster
         # total_spent should be >= 0
         assert total_spent >= 0
     finally:

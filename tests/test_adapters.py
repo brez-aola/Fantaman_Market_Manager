@@ -4,7 +4,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from app.models import Base, Team as ORMTeam, Player as ORMPlayer
-from app.adapters.sqlalchemy_repository import SQLAlchemyPlayerRepository, SQLAlchemyTeamRepository
+from app.adapters.sqlalchemy_repository import (
+    SQLAlchemyPlayerRepository,
+    SQLAlchemyTeamRepository,
+)
 from app.domain.models import Player as DomainPlayer
 
 
@@ -55,8 +58,26 @@ def test_list_all_and_team_relation(in_memory_session):
     team = ORMTeam(name="Dynamo")
     in_memory_session.add(team)
     in_memory_session.commit()
-    p1 = ORMPlayer(name="A", role="MID", team_id=team.id, costo=10, anni_contratto=1, opzione="X", squadra_reale="R1", is_injured=False)
-    p2 = ORMPlayer(name="B", role="DEF", team_id=team.id, costo=12, anni_contratto=3, opzione="Y", squadra_reale="R2", is_injured=True)
+    p1 = ORMPlayer(
+        name="A",
+        role="MID",
+        team_id=team.id,
+        costo=10,
+        anni_contratto=1,
+        opzione="X",
+        squadra_reale="R1",
+        is_injured=False,
+    )
+    p2 = ORMPlayer(
+        name="B",
+        role="DEF",
+        team_id=team.id,
+        costo=12,
+        anni_contratto=3,
+        opzione="Y",
+        squadra_reale="R2",
+        is_injured=True,
+    )
     in_memory_session.add_all([p1, p2])
     in_memory_session.commit()
 

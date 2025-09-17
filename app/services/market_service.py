@@ -17,11 +17,17 @@ class MarketService:
     """
 
     def validate_player_assignment(
-        self, id: str, squadra: Optional[str], costo: Optional[str], anni_contratto: Optional[str]
+        self,
+        id: str,
+        squadra: Optional[str],
+        costo: Optional[str],
+        anni_contratto: Optional[str],
     ) -> Optional[str]:
         if not id or not str(id).isdigit():
             return "ID giocatore non valido."
-        if squadra and squadra not in []:  # team set validation should be done by caller if needed
+        if (
+            squadra and squadra not in []
+        ):  # team set validation should be done by caller if needed
             # keep lightweight here; the web-layer will check canonical teams
             pass
         try:
@@ -57,7 +63,10 @@ class MarketService:
     # Team cash helpers (migrated from app.py) -------------------------------------------------
     def get_team_cash(self, conn: sqlite3.Connection, team: str):
         cur = conn.cursor()
-        cur.execute("SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?", (team,))
+        cur.execute(
+            "SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
+            (team,),
+        )
         r = cur.fetchone()
         if r:
             iniziale = float(r[0]) if r[0] is not None else 300.0
@@ -69,7 +78,9 @@ class MarketService:
 
     def update_team_cash(self, conn: sqlite3.Connection, team: str, new_attuale: float):
         cur = conn.cursor()
-        cur.execute("SELECT carryover, cassa_iniziale FROM fantateam WHERE squadra=?", (team,))
+        cur.execute(
+            "SELECT carryover, cassa_iniziale FROM fantateam WHERE squadra=?", (team,)
+        )
         r = cur.fetchone()
         if r and r[0] is not None:
             carryover = float(r[0]) if r[0] is not None else 0.0
@@ -82,9 +93,14 @@ class MarketService:
             (team, carryover, cassa_iniziale, new_attuale),
         )
 
-    def atomic_charge_team(self, conn: sqlite3.Connection, team: str, amount: float) -> bool:
+    def atomic_charge_team(
+        self, conn: sqlite3.Connection, team: str, amount: float
+    ) -> bool:
         cur = conn.cursor()
-        cur.execute("SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?", (team,))
+        cur.execute(
+            "SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
+            (team,),
+        )
         r = cur.fetchone()
         if not r:
             cur.execute(
@@ -94,7 +110,9 @@ class MarketService:
         else:
             if r[2] is None:
                 iniz = float(r[1]) if r[1] is not None else 300.0
-                cur.execute("UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (iniz, team))
+                cur.execute(
+                    "UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (iniz, team)
+                )
         cur.execute(
             "UPDATE fantateam SET cassa_attuale = cassa_attuale - ? WHERE squadra=? AND cassa_attuale >= ?",
             (amount, team, amount),
@@ -103,7 +121,10 @@ class MarketService:
 
     def refund_team(self, conn: sqlite3.Connection, team: str, amount: float):
         cur = conn.cursor()
-        cur.execute("SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?", (team,))
+        cur.execute(
+            "SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
+            (team,),
+        )
         r = cur.fetchone()
         if r:
             try:
@@ -112,14 +133,18 @@ class MarketService:
                 cur_att = r[2]
             if cur_att is not None:
                 new = float(cur_att) + amount
-                cur.execute("UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (new, team))
+                cur.execute(
+                    "UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (new, team)
+                )
             else:
                 try:
                     iniz = float(r[1]) if r[1] is not None else 300.0
                 except Exception:
                     iniz = 300.0
                 new = iniz + amount
-                cur.execute("UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (new, team))
+                cur.execute(
+                    "UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (new, team)
+                )
         else:
             cur.execute(
                 "INSERT INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)",
@@ -128,12 +153,18 @@ class MarketService:
 
     # High-level operations -------------------------------------------------------------------
     def assign_player(
-        self, conn: sqlite3.Connection, id: str, squadra: Optional[str], costo: Optional[str], anni_contratto: Optional[str], opzione: Optional[str]
+        self,
+        conn: sqlite3.Connection,
+        id: str,
+        squadra: Optional[str],
+        costo: Optional[str],
+        anni_contratto: Optional[str],
+        opzione: Optional[str],
     ) -> Dict[str, Any]:
         """Perform assign/move/unassign logic. Returns dict with keys: success(bool), error(optional), available(optional)."""
         cur = conn.cursor()
-        squadra_val, costo_val, anni_contratto, opzione = self.normalize_assignment_values(
-            squadra, costo, anni_contratto, opzione
+        squadra_val, costo_val, anni_contratto, opzione = (
+            self.normalize_assignment_values(squadra, costo, anni_contratto, opzione)
         )
 
         # Find current assignment
@@ -152,7 +183,10 @@ class MarketService:
         if squadra_val is None:
             if prev_team and prev_cost > 0:
                 self.refund_team(conn, prev_team, prev_cost)
-            cur.execute('UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?', (None, None, None, None, id))
+            cur.execute(
+                'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                (None, None, None, None, id),
+            )
             conn.commit()
             return {"success": True}
 
@@ -165,16 +199,34 @@ class MarketService:
             ok = self.atomic_charge_team(conn, squadra_val, costo_val)
             if not ok:
                 conn.rollback()
-                cur.execute("SELECT cassa_attuale FROM fantateam WHERE squadra=?", (squadra_val,))
+                cur.execute(
+                    "SELECT cassa_attuale FROM fantateam WHERE squadra=?",
+                    (squadra_val,),
+                )
                 rr = cur.fetchone()
                 avail = float(rr[0]) if rr and rr[0] is not None else 300.0
-                return {"success": False, "error": "Fondi insufficienti", "available": avail}
+                return {
+                    "success": False,
+                    "error": "Fondi insufficienti",
+                    "available": avail,
+                }
 
-        cur.execute('UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?', (squadra_val, costo_val, anni_contratto, opzione, id))
+        cur.execute(
+            'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+            (squadra_val, costo_val, anni_contratto, opzione, id),
+        )
         conn.commit()
         return {"success": True}
 
-    def update_player(self, conn: sqlite3.Connection, pid: str, squadra: Optional[str], costo: Optional[str], anni_contratto: Optional[str], opzione: Optional[str]) -> Dict[str, Any]:
+    def update_player(
+        self,
+        conn: sqlite3.Connection,
+        pid: str,
+        squadra: Optional[str],
+        costo: Optional[str],
+        anni_contratto: Optional[str],
+        opzione: Optional[str],
+    ) -> Dict[str, Any]:
         # Similar to assign_player but returns the updated row as dict
         cur = conn.cursor()
         if squadra == "" or squadra is None:
@@ -207,9 +259,15 @@ class MarketService:
         if squadra_val is None and prev_team:
             if prev_cost > 0:
                 self.refund_team(conn, prev_team, prev_cost)
-            cur.execute('UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?', (None, None, None, None, pid))
+            cur.execute(
+                'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                (None, None, None, None, pid),
+            )
             conn.commit()
-            cur.execute('SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, squadra FROM giocatori WHERE rowid=?', (pid,))
+            cur.execute(
+                'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, squadra FROM giocatori WHERE rowid=?',
+                (pid,),
+            )
             row = cur.fetchone()
             return dict(row) if row else {}
 
@@ -220,19 +278,34 @@ class MarketService:
             ok = self.atomic_charge_team(conn, squadra_val, costo_val)
             if not ok:
                 conn.rollback()
-                cur.execute("SELECT cassa_attuale FROM fantateam WHERE squadra=?", (squadra_val,))
+                cur.execute(
+                    "SELECT cassa_attuale FROM fantateam WHERE squadra=?",
+                    (squadra_val,),
+                )
                 r = cur.fetchone()
                 avail = float(r[0]) if r and r[0] is not None else 300.0
-                return {"error": "Fondi insufficienti", "needed": costo_val, "available": avail}
+                return {
+                    "error": "Fondi insufficienti",
+                    "needed": costo_val,
+                    "available": avail,
+                }
 
-        cur.execute('UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?', (squadra_val, costo_val, anni_contratto, opzione, pid))
+        cur.execute(
+            'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+            (squadra_val, costo_val, anni_contratto, opzione, pid),
+        )
         conn.commit()
-        cur.execute('SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, squadra FROM giocatori WHERE rowid=?', (pid,))
+        cur.execute(
+            'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, squadra FROM giocatori WHERE rowid=?',
+            (pid,),
+        )
         row = cur.fetchone()
         return dict(row) if row else {}
 
     # Utility/read helpers -----------------------------------------------------
-    def get_name_suggestions(self, conn: sqlite3.Connection, query: str, limit: int = 8):
+    def get_name_suggestions(
+        self, conn: sqlite3.Connection, query: str, limit: int = 8
+    ):
         """Return a list of distinct player name suggestions for a short query.
 
         This mirrors the lightweight suggestion SQL used in the legacy code.
@@ -277,7 +350,10 @@ class MarketService:
         cur = conn.cursor()
         team_casse = []
         for s in squadre:
-            cur.execute("SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?", (s,))
+            cur.execute(
+                "SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
+                (s,),
+            )
             tr = cur.fetchone()
             if tr and tr[0] is not None:
                 starting = float(tr[0])
@@ -295,7 +371,9 @@ class MarketService:
                 (s,),
             )
             spent_row = cur.fetchone()
-            spent = float(spent_row[0]) if spent_row and spent_row[0] is not None else 0.0
+            spent = (
+                float(spent_row[0]) if spent_row and spent_row[0] is not None else 0.0
+            )
             remaining = starting - spent
             cur.execute(
                 """
@@ -312,7 +390,9 @@ class MarketService:
             dif_count = int(counts.get("D", 0))
             cen_count = int(counts.get("C", 0))
             att_count = int(counts.get("A", 0))
-            missing_portieri = max(0, rose_structure.get("Portieri", 0) - portieri_count)
+            missing_portieri = max(
+                0, rose_structure.get("Portieri", 0) - portieri_count
+            )
             missing_dif = max(0, rose_structure.get("Difensori", 0) - dif_count)
             missing_cen = max(0, rose_structure.get("Centrocampisti", 0) - cen_count)
             missing_att = max(0, rose_structure.get("Attaccanti", 0) - att_count)
@@ -337,7 +417,13 @@ class MarketService:
 
         Returns (team_roster, starting_pot, total_spent, cassa)
         """
-        ruolo_map = {"P": "Portieri", "G": "Portieri", "D": "Difensori", "C": "Centrocampisti", "A": "Attaccanti"}
+        ruolo_map = {
+            "P": "Portieri",
+            "G": "Portieri",
+            "D": "Difensori",
+            "C": "Centrocampisti",
+            "A": "Attaccanti",
+        }
         team_roster = {r: [] for r in rose_structure.keys()}
         cur = conn.cursor()
         cur.execute(
@@ -365,13 +451,17 @@ class MarketService:
                 }
             )
 
-        cur.execute('SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?', (tname,))
+        cur.execute(
+            "SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
+            (tname,),
+        )
         team_row = cur.fetchone()
         if team_row:
             starting_pot = float(team_row[0])
         else:
             starting_pot = 300.0
-        total_spent = sum([float(r["costo"]) for r in rows if r["costo"] not in (None, "")])
+        total_spent = sum(
+            [float(r["costo"]) for r in rows if r["costo"] not in (None, "")]
+        )
         cassa = starting_pot - total_spent
         return team_roster, starting_pot, total_spent, cassa
-

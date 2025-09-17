@@ -11,13 +11,13 @@ def client(tmp_path):
     # create a temp DB path
     temp_db = tmp_path / "test_giocatori.db"
     # if a real DB exists in repo, copy it to temp; otherwise create minimal schema later
-    repo_db = os.path.join(os.path.dirname(__file__), '..', 'giocatori.db')
+    repo_db = os.path.join(os.path.dirname(__file__), "..", "giocatori.db")
     if os.path.exists(repo_db):
         import shutil
 
         shutil.copy(repo_db, temp_db)
     # create test app with overridden DB_PATH
-    app = create_app({'DB_PATH': str(temp_db), 'TESTING': True})
+    app = create_app({"DB_PATH": str(temp_db), "TESTING": True})
     # ensure templates/static resolution if needed
     with app.test_client() as client:
         yield client
@@ -25,29 +25,43 @@ def client(tmp_path):
 
 def test_update_player_json_and_assign_form(client):
     # POST JSON to update_player with invalid id -> 400
-    r = client.post('/update_player', json={'id': 'not-a-number'})
+    r = client.post("/update_player", json={"id": "not-a-number"})
     assert r.status_code == 400
 
     # Create a new player row and then update it using the configured DB path from app
-    db_path = client.application.config['DB_PATH']
+    db_path = client.application.config["DB_PATH"]
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
-    cur.execute('CREATE TABLE IF NOT EXISTS giocatori ("Nome" TEXT, squadra TEXT, "Costo" REAL, anni_contratto INTEGER, opzione TEXT)')
-    cur.execute('INSERT INTO giocatori("Nome") VALUES (?)', ('Test Player',))
+    cur.execute(
+        'CREATE TABLE IF NOT EXISTS giocatori ("Nome" TEXT, squadra TEXT, "Costo" REAL, anni_contratto INTEGER, opzione TEXT)'
+    )
+    cur.execute('INSERT INTO giocatori("Nome") VALUES (?)', ("Test Player",))
     rowid = cur.lastrowid
     conn.commit()
 
     # Update via JSON assign to a valid team
-    squadre = client.application.config['SQUADRE']
-    payload = {'id': rowid, 'squadra': squadre[0], 'costo': '10', 'anni_contratto': '1', 'opzione': 'SI'}
-    r = client.post('/update_player', json=payload)
+    squadre = client.application.config["SQUADRE"]
+    payload = {
+        "id": rowid,
+        "squadra": squadre[0],
+        "costo": "10",
+        "anni_contratto": "1",
+        "opzione": "SI",
+    }
+    r = client.post("/update_player", json=payload)
     assert r.status_code in (200, 201)
     data = r.get_json()
-    assert data.get('id') == rowid
+    assert data.get("id") == rowid
 
     # Now test form POST to /assegna_giocatore (form-encoded)
-    form = {'id': rowid, 'squadra': squadre[0], 'costo': '5', 'anni_contratto': '1', 'opzione': 'on'}
-    r = client.post('/assegna_giocatore', data=form)
+    form = {
+        "id": rowid,
+        "squadra": squadre[0],
+        "costo": "5",
+        "anni_contratto": "1",
+        "opzione": "on",
+    }
+    r = client.post("/assegna_giocatore", data=form)
     # success should redirect to '/', so expect 302 or 200 depending on test client behavior
     assert r.status_code in (200, 302)
 

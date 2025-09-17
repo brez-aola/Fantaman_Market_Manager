@@ -4,6 +4,7 @@ Provides a single place to create sqlite3 connections with the correct row_facto
 and a default path. Scripts and modules should call `get_connection(db_path=None)` so
 we can change creation logic in one place later (for example to switch to SQLAlchemy).
 """
+
 import sqlite3
 import os
 from typing import Optional
