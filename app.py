@@ -2,6 +2,7 @@ from flask import Flask, render_template_string, request, jsonify
 import urllib.parse
 import sqlite3
 import os
+from app.services.market_service import MarketService
 
 app = Flask(__name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), "giocatori.db")
@@ -1133,7 +1134,6 @@ def index():
     )
 
 
-@app.route("/assegna_giocatore", methods=["POST"])
 def validate_player_assignment(id, squadra, costo, anni_contratto):
     if not id or not str(id).isdigit():
         return "ID giocatore non valido."
@@ -1171,6 +1171,7 @@ def normalize_assignment_values(squadra, costo, anni_contratto, opzione):
     return squadra_val, costo_val, anni_contratto, opzione
 
 
+@app.route("/assegna_giocatore", methods=["POST"])
 def assegna_giocatore():
     # Tutte le query SQL usano parametri per prevenire SQL injection.
     """
@@ -1201,87 +1202,48 @@ def assegna_giocatore():
             f'<div style="margin-bottom:12px;">{error_msg}</div>'
             f'<a href="/" style="color:#0056b3; text-decoration:underline;">Torna indietro</a>'
             f"</body></html>",
-            400,
-        )
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    squadra_val, costo_val, anni_contratto, opzione = normalize_assignment_values(
-        squadra, costo, anni_contratto, opzione
-    )
-    try:
-        # Find current assignment (if any)
-        cur.execute("SELECT squadra, Costo FROM giocatori WHERE rowid=?", (id,))
-        prev = cur.fetchone()
-        prev_team = None
-        prev_cost = 0.0
-        if prev:
-            prev_team = prev["squadra"]
-            try:
-                prev_cost = (
-                    float(prev["Costo"]) if prev["Costo"] not in (None, "") else 0.0
-                )
-            except Exception:
-                prev_cost = 0.0
-        # If removing assignment (squadra_val is None): refund previous team's cassa_attuale by prev_cost
-        if squadra_val is None:
-            if prev_team and prev_cost > 0:
-                refund_team(conn, prev_team, prev_cost)
-            # update player row
-            cur.execute(
-                'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
-                (None, None, None, None, id),
-            )
-            conn.commit()
-            return __import__("flask").redirect("/")
-        # Assigning or moving: attempt atomic charge on target team
-        # If moving from prev_team, refund prev first (so their cash is restored)
-        if prev_team and prev_team != squadra_val and prev_cost > 0:
-            refund_team(conn, prev_team, prev_cost)
-        # Try to atomically deduct the cost from target team
-        if costo_val > 0:
-            ok = atomic_charge_team(conn, squadra_val, costo_val)
-            if not ok:
-                conn.rollback()
-                # insufficient funds -> return 400 HTML for form
-                cur.execute(
-                    "SELECT cassa_attuale FROM fantateam WHERE squadra=?",
-                    (squadra_val,),
-                )
-                rr = cur.fetchone()
-                avail = (
-                    float(rr["cassa_attuale"])
-                    if rr and rr["cassa_attuale"] is not None
-                    else 300.0
-                )
+            id = request.form.get("id")
+            squadra = request.form.get("squadra")
+            costo = request.form.get("costo")
+            anni_contratto = request.form.get("anni_contratto")
+            opzione = "SI" if request.form.get("opzione") == "on" else "NO"
+
+            service = MarketService()
+            # Validate input (service performs basic checks; web layer enforces canonical teams)
+            error_msg = service.validate_player_assignment(id, squadra, costo, anni_contratto)
+            if squadra and squadra not in SQUADRE:
+                error_msg = "Squadra selezionata non valida."
+            if error_msg:
                 return (
-                    '<html><body>Fondi insufficienti per assegnare (costo: {} &gt; disponibile: {}). <a href="/">Indietro</a></body></html>'.format(
-                        costo_val, avail
-                    ),
+                    f'<html><body style="font-family:Arial; color:#8a1f11; background:#fff8e1; padding:24px; border-radius:8px;">'
+                    f"<h2>Errore di assegnazione</h2>"
+                    f'<div style="margin-bottom:12px;">{error_msg}</div>'
+                    f'<a href="/" style="color:#0056b3; text-decoration:underline;">Torna indietro</a>'
+                    f"</body></html>",
                     400,
                 )
-        # Update player row
-        cur.execute(
-            'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
-            (squadra_val, costo_val, anni_contratto, opzione, id),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    # Reindirizza alla pagina principale
-    from flask import redirect
 
-    return redirect("/")
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            try:
+                res = service.assign_player(conn, id, squadra, costo, anni_contratto, opzione)
+                if not res.get("success"):
+                    # insufficient funds or other business error -> return HTML 400 like previous behavior
+                    avail = res.get("available")
+                    if avail is None:
+                        avail = 300.0
+                    return (
+                        '<html><body>Fondi insufficienti per assegnare (costo: {} &gt; disponibile: {}). <a href="/">Indietro</a></body></html>'.format(
+                            float(str(costo).replace(",", "").replace("€", "").strip()) if costo not in (None, "") else 0.0,
+                            avail,
+                        ),
+                        400,
+                    )
+            finally:
+                conn.close()
+            from flask import redirect
 
-
-@app.route("/update_player", methods=["POST"])
-def update_player():
-    # Tutte le query SQL usano parametri per prevenire SQL injection.
-    data = request.get_json() or {}
-    pid = data.get("id")
-    squadra = data.get("squadra")
-    costo = data.get("costo")
-    anni_contratto = data.get("anni_contratto")
+            return redirect("/")
     opzione = data.get("opzione")
     # Validazione input
     error_msg = None
@@ -1334,125 +1296,26 @@ def update_player():
             prev = cur.fetchone()
             prev_team = None
             prev_cost = 0.0
-            if prev:
-                prev_team = prev["squadra"]
-                try:
-                    prev_cost = (
-                        float(prev["Costo"]) if prev["Costo"] not in (None, "") else 0.0
-                    )
-                except Exception:
-                    prev_cost = 0.0
+            # Basic validation using the service for numeric parsing; web-layer enforces canonical teams
+            service = MarketService()
+            if not pid or not str(pid).isdigit():
+                return (jsonify({"error": "ID giocatore non valido."}), 400)
+            if squadra and squadra not in SQUADRE:
+                return (jsonify({"error": "Squadra selezionata non valida."}), 400)
+            if anni_contratto and str(anni_contratto) not in ["1", "2", "3"]:
+                return (jsonify({"error": "Anni contratto non valido."}), 400)
 
-            # If unassigning (squadra_val is None), refund previous team
-            if squadra_val is None and prev_team:
-                if prev_cost > 0:
-                    refund_team(conn, prev_team, prev_cost)
-                cur.execute(
-                    'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
-                    (None, None, None, None, pid),
-                )
-                conn.commit()
-                cur.execute(
-                    'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, squadra FROM giocatori WHERE rowid=?',
-                    (pid,),
-                )
-                row = cur.fetchone()
-                return jsonify(dict(row) if row else {})
-
-            # Assigning or moving: if moving from prev_team refund prev first
-            if prev_team and prev_team != squadra_val and prev_cost > 0:
-                refund_team(conn, prev_team, prev_cost)
-
-            # Try to deduct atomically from target team
-            if squadra_val and costo_val > 0:
-                ok = atomic_charge_team(conn, squadra_val, costo_val)
-                if not ok:
-                    conn.rollback()
-                    # return JSON error with available funds
-                    cur.execute(
-                        "SELECT cassa_attuale FROM fantateam WHERE squadra=?",
-                        (squadra_val,),
-                    )
-                    r = cur.fetchone()
-                    avail = (
-                        float(r["cassa_attuale"])
-                        if r and r["cassa_attuale"] is not None
-                        else 300.0
-                    )
-                    return (
-                        __import__("flask").jsonify(
-                            {
-                                "error": "Fondi insufficienti",
-                                "needed": costo_val,
-                                "available": avail,
-                            }
-                        ),
-                        400,
-                    )
-
-            # Finally, update player
-            cur.execute(
-                'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
-                (squadra_val, costo_val, anni_contratto, opzione, pid),
-            )
-            conn.commit()
-            cur.execute(
-                'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, squadra FROM giocatori WHERE rowid=?',
-                (pid,),
-            )
-            row = cur.fetchone()
-            result = dict(row) if row else {}
-        finally:
-            conn.close()
-        return jsonify(result)
-
-
-@app.route("/rose", methods=["GET"])
-def rose():
-    # Costruisci rose leggendo dal DB
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    # Recupera i giocatori con squadra assegnata
-    # IMPORTANT: players who are optioned (opzione='SI') but have no contract (anni_contratto IS NULL)
-    # should NOT appear in the visible rosters — they are only included once confirmed during the auction.
-    cur.execute(
-        """SELECT rowid AS id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, FantaSquadra
-        FROM giocatori
-        WHERE FantaSquadra IS NOT NULL
-        AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)
-    """
-    )
-    rows = cur.fetchall()
-    conn.close()
-
-    # Mappa ruolo codice a ruolo esteso
-    ruolo_map = {
-        "P": "Portieri",
-        "G": "Portieri",
-        "D": "Difensori",
-        "C": "Centrocampisti",
-        "A": "Attaccanti",
-    }
-
-    # Inizializza le rose. Include sia le squadre canoniche in SQUADRE sia qualsiasi nome di squadra trovato nel DB
-    # (così i giocatori assegnati con nomi leggermente diversi non spariscono dalla pagina Rose).
-    teams_in_rows = {row["FantaSquadra"] for row in rows if row["FantaSquadra"]}
-    all_teams = list(dict.fromkeys(list(SQUADRE) + sorted(teams_in_rows)))
-    # Inizializza la mappa delle rose per tutte le team names trovate
-    rose = {s: {r: [] for r in ROSE_STRUCTURE.keys()} for s in all_teams}
-    for row in rows:
-        sname = row["FantaSquadra"]
-        codice_ruolo = (row["ruolo"] or "").strip()
-        # prendi il primo carattere rilevante
-        key = None
-        if codice_ruolo:
-            ch = codice_ruolo[0].upper()
-            key = ruolo_map.get(ch)
-        if not key:
-            # se non riusciamo a determinare il ruolo dalla colonna 'R.' salta il giocatore
-            continue
-        # append only if we resolved a role and the squadra is present in our rose mapping
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            try:
+                res = service.update_player(conn, pid, squadra, costo, anni_contratto, opzione)
+                # service returns error dict on insufficient funds
+                if isinstance(res, dict) and res.get("error"):
+                    # Normalize legacy response shape
+                    return (jsonify(res), 400)
+                return jsonify(res)
+            finally:
+                conn.close()
         if sname in rose:
             rose[sname][key].append(
                 {
