@@ -3,6 +3,7 @@ import urllib.parse
 import sqlite3
 import os
 from app.services.market_service import MarketService
+import app.market as market_module
 
 app = Flask(__name__)
 DB_PATH = os.path.join(os.path.dirname(__file__), "giocatori.db")
@@ -609,208 +610,8 @@ function showToast(msg){
 
 @app.route("/", methods=["GET"])
 def index():
-    query = request.args.get("q", "").strip()
-    ruolo = request.args.get("ruolo", "").strip()
-    squadra = request.args.get("squadra", "").strip()
-    # ruoli selezionati (checkbox multipli). Se non presenti, tutti abilitati di default
-    roles_selected = request.args.getlist("roles")
-    costo_min = request.args.get("costo_min", "").strip()
-    costo_max = request.args.get("costo_max", "").strip()
-    opzione = request.args.get("opzione", "").strip()
-    anni_contratto = request.args.get("anni_contratto", "").strip()
-    page = int(request.args.get("page", 1))
-    per_page = 50
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute("PRAGMA table_info(giocatori)")
-    # Ottieni colonne dalla tabella in modo sicuro
-    columns_info = cur.fetchall()
-    columns = [row["name"] for row in columns_info]
-    # Remove the '#' column from display (it contains internal ids) but keep it available as rowid
-    if "#" in columns:
-        columns = [c for c in columns if c != "#"]
-    # Remove 'Fuori lista' column from display per user request
-    if "Fuori lista" in columns:
-        columns = [c for c in columns if c != "Fuori lista"]
-    # Remove 'Under' and 'R.MANTRA' columns from display per user request
-    for hide_col in ["Under", "R.MANTRA"]:
-        if hide_col in columns:
-            columns = [c for c in columns if c != hide_col]
-    # Remove 'FVM/1000' from display per user request
-    if "FVM/1000" in columns:
-        columns = [c for c in columns if c != "FVM/1000"]
-    # Build display_columns ordering so key columns appear first and avoid header/data mismatch
-    preferred = ["Nome", "Sq.", "FantaSquadra"]
-    # Crea una mappa dei nomi di colonna sicuri (solo lettere, numeri e underscore)
-    safe_columns = []
-    for col in columns:
-        if col.replace("_", "").isalnum():
-            safe_columns.append(col)
-    if not safe_columns:
-        safe_columns = columns
-
-    # Costruisci query avanzata (seleziona anche rowid come id se non presente)
-    sql = "SELECT rowid AS id, * FROM giocatori WHERE 1=1"
-    params = []
-    if query:
-        like = f"%{query}%"
-        # Usa solo colonne sicure per costruire la clausola LIKE
-        where = " OR ".join([f'"{col}" LIKE ?' for col in safe_columns])
-        sql += f" AND ({where})"
-        params += [like] * len(safe_columns)
-    if ruolo:
-        sql += " AND ruolo LIKE ?"
-        params.append(f"%{ruolo}%")
-    # Filtra per ruoli (checkbox): Portieri, Difensori, Centrocampisti, Attaccanti
-    role_map = {
-        "Portieri": ["P", "G"],
-        "Difensori": ["D"],
-        "Centrocampisti": ["C"],
-        "Attaccanti": ["A"],
-    }
-    # if roles_selected empty -> default all
-    if not roles_selected:
-        roles_selected = list(role_map.keys())
-    # costruiamo lista di codici (es. 'A','C',...)
-    codes = []
-    for rcat in roles_selected:
-        codes += role_map.get(rcat, [])
-    if codes:
-        role_where = " OR ".join([f'"R." LIKE ?' for _ in codes])
-        sql += f" AND ({role_where})"
-        params += [f"{c}%" for c in codes]
-    else:
-        # nessun ruolo selezionato => nessun risultato
-        sql += " AND 0"
-    if squadra:
-        sql += " AND squadra LIKE ?"
-        params.append(f"%{squadra}%")
-    if costo_min:
-        sql += " AND costo >= ?"
-        params.append(costo_min)
-    if costo_max:
-        sql += " AND costo <= ?"
-        params.append(costo_max)
-    if opzione:
-        sql += " AND opzione LIKE ?"
-        params.append(f"%{opzione}%")
-    if anni_contratto:
-        sql += " AND anni_contratto = ?"
-        params.append(anni_contratto)
-
-    # Conta totale risultati
-    count_sql = "SELECT COUNT(*) FROM giocatori WHERE 1=1"
-    count_params = []
-    if query:
-        like = f"%{query}%"
-        where = " OR ".join([f'"{col}" LIKE ?' for col in safe_columns])
-        count_sql += f" AND ({where})"
-        count_params += [like] * len(safe_columns)
-    if ruolo:
-        count_sql += " AND ruolo LIKE ?"
-        count_params.append(f"%{ruolo}%")
-    if squadra:
-        count_sql += " AND squadra LIKE ?"
-        count_params.append(f"%{squadra}%")
-    if costo_min:
-        count_sql += " AND costo >= ?"
-        count_params.append(costo_min)
-    if costo_max:
-        count_sql += " AND costo <= ?"
-        count_params.append(costo_max)
-    if opzione:
-        count_sql += " AND opzione LIKE ?"
-        count_params.append(f"%{opzione}%")
-    if anni_contratto:
-        count_sql += " AND anni_contratto = ?"
-        count_params.append(anni_contratto)
-    # Applica filtro ruoli anche al count
-    if not roles_selected:
-        roles_selected = list(role_map.keys())
-    codes = []
-    for rcat in roles_selected:
-        codes += role_map.get(rcat, [])
-    if codes:
-        role_where = " OR ".join([f'"R." LIKE ?' for _ in codes])
-        count_sql += f" AND ({role_where})"
-        count_params += [f"{c}%" for c in codes]
-    else:
-        count_sql += " AND 0"
-    cur.execute(count_sql, count_params)
-    total = cur.fetchone()[0]
-
-    # --- Sorting support ---
-    # Accept sort params: sort_by (column key) and sort_dir (asc/desc)
-    sort_by = request.args.get("sort_by", "").strip()
-    sort_dir = request.args.get("sort_dir", "asc").lower()
-
-    # Map of allowed sort keys to actual SQL expressions (quoted where needed)
-    # We detect the actual column names present in the table (to handle punctuation/case)
-    def q(colname):
-        return f'"{colname}"'
-
-    allowed_sorts = {}
-    # static mappings if present
-    if "Nome" in columns:
-        allowed_sorts["nome"] = q("Nome")
-    if "Sq." in columns:
-        allowed_sorts["sq"] = q("Sq.")
-    if "FantaSquadra" in columns:
-        allowed_sorts["fantasquadra"] = q("FantaSquadra")
-    # allow sorting by squadra (team owner)
-    if "squadra" in columns:
-        allowed_sorts["squadra"] = q("squadra")
-    # detect PGv, Costo columns explicitly
-    for c in columns:
-        cl = c.lower()
-        if cl == "pgv" or cl == "pgv":
-            allowed_sorts["pgv"] = q(c)
-        if cl == "costo" or "costo" in cl:
-            allowed_sorts["costo"] = q(c)
-    # detect MV, FM, QUOT-like columns by substring match (case-insensitive)
-    quot_col = None
-    for c in columns:
-        cl = c.lower()
-        if "mv" in cl and "mv" not in allowed_sorts:
-            allowed_sorts["mv"] = q(c)
-        if "fm" in cl and "fm" not in allowed_sorts:
-            allowed_sorts["fm"] = q(c)
-        if "quot" in cl and "quot" not in allowed_sorts:
-            allowed_sorts["quot"] = q(c)
-            quot_col = c
-        # also detect pgv if not caught earlier (e.g., 'PGv')
-        if (
-            "pg" in cl
-            and "pgv" not in allowed_sorts
-            and cl.replace(".", "").startswith("pg")
-        ):
-            allowed_sorts.setdefault("pgv", q(c))
-
-    # Build clean sort links (preserve existing query params except sort_by/sort_dir)
-    base_args = request.args.to_dict(flat=False)
-    base_args.pop("sort_by", None)
-    base_args.pop("sort_dir", None)
-    sort_links = {}
-    for key in allowed_sorts.keys():
-        a = dict(base_args)
-        a["sort_by"] = key
-        a["sort_dir"] = "asc"
-        asc_q = urllib.parse.urlencode(a, doseq=True)
-        a["sort_dir"] = "desc"
-        desc_q = urllib.parse.urlencode(a, doseq=True)
-        sort_links[key] = {"asc": "?" + asc_q, "desc": "?" + desc_q}
-    # header toggle links: clicking header toggles sort direction (and we expose active sort)
-    header_toggle_links = {}
-    active_sort_key = sort_by
-    active_sort_dir = sort_dir
-    for k in allowed_sorts.keys():
-        # if currently sorted by k asc -> toggle to desc, otherwise toggle to asc
-        if active_sort_key == k and active_sort_dir == "asc":
-            header_toggle_links[k] = sort_links[k]["desc"]
-        else:
-            header_toggle_links[k] = sort_links[k]["asc"]
+    # Delegate to the market blueprint's implementation to keep a single source of truth
+    return market_module.index()
 
     # Map displayed column names to our sort keys so template can render arrows
     display_to_sortkey = {}
@@ -1068,46 +869,9 @@ def assegna_giocatore():
     anni_contratto = request.form.get("anni_contratto")
     opzione = "SI" if request.form.get("opzione") == "on" else "NO"
 
-    service = MarketService()
-    # Basic validation: service checks numeric parsing; web layer enforces canonical teams
-    error_msg = service.validate_player_assignment(id, squadra, costo, anni_contratto)
-    if squadra and squadra not in SQUADRE:
-        error_msg = "Squadra selezionata non valida."
-    if error_msg:
-        return (
-            f'<html><body style="font-family:Arial; color:#8a1f11; background:#fff8e1; padding:24px; border-radius:8px;">'
-            f"<h2>Errore di assegnazione</h2>"
-            f'<div style="margin-bottom:12px;">{error_msg}</div>'
-            f'<a href="/" style="color:#0056b3; text-decoration:underline;">Torna indietro</a>'
-            f"</body></html>",
-            400,
-        )
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
-        res = service.assign_player(conn, id, squadra, costo, anni_contratto, opzione)
-        if not res.get("success"):
-            # insufficient funds -> return same HTML 400 shape as before
-            avail = res.get("available")
-            if avail is None:
-                avail = 300.0
-            needed = 0.0
-            try:
-                needed = float(str(costo).replace(",", "").replace("€", "").strip()) if costo not in (None, "") else 0.0
-            except Exception:
-                needed = 0.0
-            return (
-                '<html><body>Fondi insufficienti per assegnare (costo: {} &gt; disponibile: {}). <a href="/">Indietro</a></body></html>'.format(
-                    needed, avail
-                ),
-                400,
-            )
-    finally:
-        conn.close()
-
-    from flask import redirect
-    return redirect("/")
+    # Delegate to blueprint implementation to keep a single source of truth for market routes
+    from app.market import assegna_giocatore as bp_assegna
+    return bp_assegna()
 
 
 TEAM_HTML = """
@@ -1188,84 +952,9 @@ TEAM_HTML = """
 
 @app.route("/squadra/<team_name>", methods=["GET"])
 def squadra(team_name):
-    # decode team name from URL
-    from urllib.parse import unquote
-
-    tname = unquote(team_name)
-    # load players assigned to this team (exclude optioned without contract)
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute(
-        'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione FROM giocatori WHERE FantaSquadra = ? AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)',
-        (tname,),
-    )
-    rows = cur.fetchall()
-    conn.close()
-
-    # build per-role lists using same shape as rose() so templates match exactly
-    ruolo_map = {
-        "P": "Portieri",
-        "G": "Portieri",
-        "D": "Difensori",
-        "C": "Centrocampisti",
-        "A": "Attaccanti",
-    }
-    team_roster = {r: [] for r in ROSE_STRUCTURE.keys()}
-    for row in rows:
-        codice = (row["ruolo"] or "").strip()
-        key = None
-        if codice:
-            ch = codice[0].upper()
-            key = ruolo_map.get(ch)
-        if not key:
-            continue
-        team_roster[key].append(
-            {
-                "id": row["id"],
-                "nome": row["nome"],
-                "ruolo": codice,
-                "squadra_reale": row["squadra_reale"],
-                "costo": row["costo"],
-                "anni_contratto": row["anni_contratto"],
-                "opzione": row["opzione"],
-            }
-        )
-
-    # compute cassa using fantateam table: starting from per-team cassa_iniziale and subtract Costo
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-    cur.execute(
-        "SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?", (tname,)
-    )
-    team_row = cur.fetchone()
-    if team_row:
-        starting_pot = float(team_row["cassa_iniziale"])
-        # if cassa_attuale is managed separately we could prefer that; for now compute spent from players
-    else:
-        starting_pot = 300.0
-    total_spent = sum([float(r["costo"]) for r in rows if r["costo"] not in (None, "")])
-    cassa = starting_pot - total_spent
-    conn.close()
-
-    # compute missing per role
-    missing = {
-        r: max(0, ROSE_STRUCTURE[r] - len(team_roster[r]))
-        for r in ROSE_STRUCTURE.keys()
-    }
-
-    # prepare a rose-like mapping for the template
-    rose = {tname: team_roster}
-    return render_template_string(
-        TEAM_HTML,
-        tname=tname,
-        roster=team_roster,
-        rose_structure=ROSE_STRUCTURE,
-        starting_pot=starting_pot,
-        total_spent=total_spent,
-        cassa=cassa,
-    )
+    # Delegate to blueprint implementation for team page rendering
+    from app.market import squadra as bp_squadra
+    return bp_squadra(team_name)
 
 
 if __name__ == "__main__":
