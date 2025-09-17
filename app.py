@@ -1,5 +1,4 @@
-from flask import Flask, render_template_string, request, jsonify
-import urllib.parse
+from flask import Flask, render_template_string, request
 import os
 from app.db import get_connection
 from app.services.market_service import MarketService
@@ -716,7 +715,7 @@ def index():
                     suggestions.append(name)
 
             sugg_conn.close()
-        except Exception as e:
+        except Exception:
             # In caso di errore, continua senza suggerimenti
             suggestions = (
                 []

@@ -1,6 +1,5 @@
 import sys
 from pathlib import Path
-import sqlite3
 from app.db import get_connection
 from openpyxl import load_workbook
 

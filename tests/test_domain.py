@@ -1,4 +1,4 @@
-from app.domain.models import Player, Team
+from app.domain.models import Player
 
 
 def test_player_dataclass():

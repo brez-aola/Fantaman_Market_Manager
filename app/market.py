@@ -63,7 +63,7 @@ def index():
     for rcat in roles_selected:
         codes += role_map.get(rcat, [])
     if codes:
-        role_where = " OR ".join([f'"R." LIKE ?' for _ in codes])
+        role_where = " OR ".join(['"R." LIKE ?' for _ in codes])
         sql += f" AND ({role_where})"
         params += [f"{c}%" for c in codes]
     else:
@@ -115,7 +115,7 @@ def index():
     for rcat in roles_selected:
         codes += role_map.get(rcat, [])
     if codes:
-        role_where = " OR ".join([f'"R." LIKE ?' for _ in codes])
+        role_where = " OR ".join(['"R." LIKE ?' for _ in codes])
         count_sql += f" AND ({role_where})"
         count_params += [f"{c}%" for c in codes]
     else:
@@ -453,7 +453,7 @@ def rose():
         if SessionLocal:
             session = SessionLocal()
             try:
-                from .models import Player, Team
+                from .models import Player
 
                 # get players assigned to a fantasy team (team_id not null)
                 qs = session.query(Player).filter(Player.team_id.isnot(None)).all()

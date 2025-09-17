@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-import sqlite3, shutil, os, datetime, unicodedata, re
+import shutil
+import os
+import datetime
+import unicodedata
+import re
 from app.db import get_connection
 
 DB = os.path.join(os.path.dirname(__file__), "giocatori.db")

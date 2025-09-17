@@ -1,6 +1,4 @@
-import os
 import sqlite3
-import tempfile
 
 from app import create_app
 

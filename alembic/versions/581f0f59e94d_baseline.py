@@ -29,7 +29,6 @@ Edit this file later if you need to create conversion steps from the legacy
 `giocatori`/`fantateam` schema to the new ORM tables.
 """
 
-from alembic import op
 
 
 # revision identifiers, used by Alembic (kept from generated file)
