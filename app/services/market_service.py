@@ -60,6 +60,16 @@ class MarketService:
             squadra_val = squadra
         return squadra_val, costo_val, anni_contratto, opzione
 
+    def _table_has_column(self, conn: sqlite3.Connection, table: str, column: str) -> bool:
+        """Return True if the given column exists in the table on this connection."""
+        cur = conn.cursor()
+        try:
+            cur.execute(f"PRAGMA table_info({table})")
+            cols = [r[1] if isinstance(r, tuple) else r["name"] for r in cur.fetchall()]
+            return column in cols
+        except Exception:
+            return False
+
     # Team cash helpers (migrated from app.py) -------------------------------------------------
     def get_team_cash(self, conn: sqlite3.Connection, team: str):
         cur = conn.cursor()
@@ -168,25 +178,47 @@ class MarketService:
         )
 
         # Find current assignment
-        cur.execute("SELECT squadra, Costo FROM giocatori WHERE rowid=?", (id,))
-        prev = cur.fetchone()
-        prev_team = None
-        prev_cost = 0.0
-        if prev:
-            prev_team = prev[0]
-            try:
-                prev_cost = float(prev[1]) if prev[1] not in (None, "") else 0.0
-            except Exception:
-                prev_cost = 0.0
+        # Read legacy `squadra` and optionally `FantaSquadra` if the column exists
+        has_fanta = self._table_has_column(conn, "giocatori", "FantaSquadra")
+        if has_fanta:
+            cur.execute('SELECT "squadra", "FantaSquadra", Costo FROM giocatori WHERE rowid=?', (id,))
+            prev = cur.fetchone()
+            prev_team = None
+            prev_cost = 0.0
+            if prev:
+                # prefer FantaSquadra (column 1) when available, otherwise fall back to squadra (column 0)
+                prev_team = prev[1] if prev[1] not in (None, "") else prev[0]
+                try:
+                    prev_cost = float(prev[2]) if prev[2] not in (None, "") else 0.0
+                except Exception:
+                    prev_cost = 0.0
+        else:
+            cur.execute('SELECT "squadra", Costo FROM giocatori WHERE rowid=?', (id,))
+            prev = cur.fetchone()
+            prev_team = None
+            prev_cost = 0.0
+            if prev:
+                prev_team = prev[0]
+                try:
+                    prev_cost = float(prev[1]) if prev[1] not in (None, "") else 0.0
+                except Exception:
+                    prev_cost = 0.0
 
         # Unassign
         if squadra_val is None:
             if prev_team and prev_cost > 0:
                 self.refund_team(conn, prev_team, prev_cost)
-            cur.execute(
-                'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
-                (None, None, None, None, id),
-            )
+            # Clear squadra (and FantaSquadra if present) when unassigning so roster pages update
+            if has_fanta:
+                cur.execute(
+                    'UPDATE giocatori SET "squadra"=?, "FantaSquadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                    (None, None, None, None, None, id),
+                )
+            else:
+                cur.execute(
+                    'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                    (None, None, None, None, id),
+                )
             conn.commit()
             return {"success": True}
 
@@ -211,10 +243,17 @@ class MarketService:
                     "available": avail,
                 }
 
-        cur.execute(
-            'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
-            (squadra_val, costo_val, anni_contratto, opzione, id),
-        )
+        # Keep legacy `squadra` in sync with `FantaSquadra` so different parts of the app see the change
+        if has_fanta:
+            cur.execute(
+                'UPDATE giocatori SET "squadra"=?, "FantaSquadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                (squadra_val, squadra_val, costo_val, anni_contratto, opzione, id),
+            )
+        else:
+            cur.execute(
+                'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                (squadra_val, costo_val, anni_contratto, opzione, id),
+            )
         conn.commit()
         return {"success": True}
 
@@ -245,24 +284,45 @@ class MarketService:
         except Exception:
             costo_val = 0.0
 
-        cur.execute("SELECT squadra, Costo FROM giocatori WHERE rowid=?", (pid,))
-        prev = cur.fetchone()
-        prev_team = None
-        prev_cost = 0.0
-        if prev:
-            prev_team = prev[0]
-            try:
-                prev_cost = float(prev[1]) if prev[1] not in (None, "") else 0.0
-            except Exception:
-                prev_cost = 0.0
+        # read legacy `squadra` and optionally `FantaSquadra` if the column exists
+        has_fanta = self._table_has_column(conn, "giocatori", "FantaSquadra")
+        if has_fanta:
+            cur.execute('SELECT "squadra", "FantaSquadra", Costo FROM giocatori WHERE rowid=?', (pid,))
+            prev = cur.fetchone()
+            prev_team = None
+            prev_cost = 0.0
+            if prev:
+                # prefer FantaSquadra (column 1) when available, otherwise fall back to squadra (column 0)
+                prev_team = prev[1] if prev[1] not in (None, "") else prev[0]
+                try:
+                    prev_cost = float(prev[2]) if prev[2] not in (None, "") else 0.0
+                except Exception:
+                    prev_cost = 0.0
+        else:
+            cur.execute('SELECT "squadra", Costo FROM giocatori WHERE rowid=?', (pid,))
+            prev = cur.fetchone()
+            prev_team = None
+            prev_cost = 0.0
+            if prev:
+                prev_team = prev[0]
+                try:
+                    prev_cost = float(prev[1]) if prev[1] not in (None, "") else 0.0
+                except Exception:
+                    prev_cost = 0.0
 
         if squadra_val is None and prev_team:
             if prev_cost > 0:
                 self.refund_team(conn, prev_team, prev_cost)
-            cur.execute(
-                'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
-                (None, None, None, None, pid),
-            )
+            if has_fanta:
+                cur.execute(
+                    'UPDATE giocatori SET "squadra"=?, "FantaSquadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                    (None, None, None, None, None, pid),
+                )
+            else:
+                cur.execute(
+                    'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                    (None, None, None, None, pid),
+                )
             conn.commit()
             cur.execute(
                 'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, squadra FROM giocatori WHERE rowid=?',
@@ -291,8 +351,8 @@ class MarketService:
                 }
 
         cur.execute(
-            'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
-            (squadra_val, costo_val, anni_contratto, opzione, pid),
+            'UPDATE giocatori SET "squadra"=?, "FantaSquadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+            (squadra_val, squadra_val, costo_val, anni_contratto, opzione, pid),
         )
         conn.commit()
         cur.execute(

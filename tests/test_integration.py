@@ -17,6 +17,19 @@ def tmp_db_path(tmp_path):
     else:
         # ensure file exists
         dest.write_text("")
+        # create minimal schema expected by the app so CI doesn't fail
+        import sqlite3
+
+        conn = sqlite3.connect(str(dest))
+        cur = conn.cursor()
+        cur.execute(
+            'CREATE TABLE IF NOT EXISTS giocatori (rowid INTEGER PRIMARY KEY, "Nome" TEXT, squadra TEXT, "Costo" REAL, anni_contratto INTEGER, opzione TEXT)'
+        )
+        cur.execute(
+            'CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL DEFAULT 0, cassa_iniziale REAL DEFAULT 0, cassa_attuale REAL)'
+        )
+        conn.commit()
+        conn.close()
     return str(dest)
 
 

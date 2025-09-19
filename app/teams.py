@@ -64,6 +64,31 @@ def team_page(team_name):
                 )
                 total_spent = sum([float(getattr(p, "costo", 0) or 0) for p in players])
                 cassa = starting_pot - total_spent
+                # If ORM returned no players for this team, but the legacy DB has
+                # assignments in the `giocatori` table for this team (FantaSquadra),
+                # prefer the sqlite fallback so users see the up-to-date roster.
+                try:
+                    if not players:
+                        conn_check = get_connection(DB_PATH)
+                        cur_check = conn_check.cursor()
+                        cur_check.execute(
+                            'SELECT 1 FROM giocatori WHERE FantaSquadra = ? LIMIT 1',
+                            (team_name,),
+                        )
+                        if cur_check.fetchone():
+                            conn_check.close()
+                            session.close()
+                            # fallthrough to sqlite fallback below
+                            raise Exception("use sqlite fallback")
+                        conn_check.close()
+                except Exception:
+                    # close session and let fallback code below handle sqlite
+                    try:
+                        session.close()
+                    except Exception:
+                        pass
+                    raise
+
                 session.close()
                 return render_template(
                     "team.html",
