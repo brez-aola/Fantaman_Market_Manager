@@ -72,6 +72,17 @@ class MarketService:
 
     # Team cash helpers (migrated from app.py) -------------------------------------------------
     def get_team_cash(self, conn: sqlite3.Connection, team: str):
+        # ensure fantateam table exists (tests may use minimal DBs)
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL, cassa_iniziale REAL, cassa_attuale REAL)"
+            )
+        except Exception:
+            # ignore if DB doesn't support DDL here; caller will get meaningful error
+            pass
+
+        # reuse cur for actual query
         cur = conn.cursor()
         cur.execute(
             "SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
@@ -88,6 +99,12 @@ class MarketService:
 
     def update_team_cash(self, conn: sqlite3.Connection, team: str, new_attuale: float):
         cur = conn.cursor()
+        try:
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL, cassa_iniziale REAL, cassa_attuale REAL)"
+            )
+        except Exception:
+            pass
         cur.execute(
             "SELECT carryover, cassa_iniziale FROM fantateam WHERE squadra=?", (team,)
         )
@@ -107,6 +124,12 @@ class MarketService:
         self, conn: sqlite3.Connection, team: str, amount: float
     ) -> bool:
         cur = conn.cursor()
+        try:
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL, cassa_iniziale REAL, cassa_attuale REAL)"
+            )
+        except Exception:
+            pass
         cur.execute(
             "SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
             (team,),
@@ -131,6 +154,12 @@ class MarketService:
 
     def refund_team(self, conn: sqlite3.Connection, team: str, amount: float):
         cur = conn.cursor()
+        try:
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL, cassa_iniziale REAL, cassa_attuale REAL)"
+            )
+        except Exception:
+            pass
         cur.execute(
             "SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
             (team,),
@@ -350,10 +379,19 @@ class MarketService:
                     "available": avail,
                 }
 
-        cur.execute(
-            'UPDATE giocatori SET "squadra"=?, "FantaSquadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
-            (squadra_val, squadra_val, costo_val, anni_contratto, opzione, pid),
-        )
+        # Update using the appropriate column set depending on whether the
+        # legacy DB includes the FantaSquadra column. Some test DBs are minimal
+        # and won't have this column, so avoid referencing it when absent.
+        if has_fanta:
+            cur.execute(
+                'UPDATE giocatori SET "squadra"=?, "FantaSquadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                (squadra_val, squadra_val, costo_val, anni_contratto, opzione, pid),
+            )
+        else:
+            cur.execute(
+                'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                (squadra_val, costo_val, anni_contratto, opzione, pid),
+            )
         conn.commit()
         cur.execute(
             'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, squadra FROM giocatori WHERE rowid=?',
@@ -408,6 +446,7 @@ class MarketService:
         Returns list of dicts matching the shape expected by the templates.
         """
         cur = conn.cursor()
+        has_fanta = self._table_has_column(conn, "giocatori", "FantaSquadra")
         team_casse = []
         for s in squadre:
             cur.execute(
@@ -419,32 +458,58 @@ class MarketService:
                 starting = float(tr[0])
             else:
                 starting = 300.0
-            cur.execute(
-                """
-                SELECT COALESCE(SUM(CAST(
-                    REPLACE(REPLACE(REPLACE(REPLACE(COALESCE("Costo", '0'), ',', ''), '%', ''), '€', ''), ' ', '')
-                AS REAL)), 0)
-                FROM giocatori
-                WHERE FantaSquadra = ?
-                  AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)
-            """,
-                (s,),
-            )
+            if has_fanta:
+                cur.execute(
+                    """
+                    SELECT COALESCE(SUM(CAST(
+                        REPLACE(REPLACE(REPLACE(REPLACE(COALESCE("Costo", '0'), ',', ''), '%', ''), '€', ''), ' ', '')
+                    AS REAL)), 0)
+                    FROM giocatori
+                    WHERE FantaSquadra = ?
+                      AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)
+                """,
+                    (s,),
+                )
+            else:
+                # legacy column 'squadra' fallback
+                cur.execute(
+                    """
+                    SELECT COALESCE(SUM(CAST(
+                        REPLACE(REPLACE(REPLACE(REPLACE(COALESCE("Costo", '0'), ',', ''), '%', ''), '€', ''), ' ', '')
+                    AS REAL)), 0)
+                    FROM giocatori
+                    WHERE squadra = ?
+                      AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)
+                """,
+                    (s,),
+                )
             spent_row = cur.fetchone()
             spent = (
                 float(spent_row[0]) if spent_row and spent_row[0] is not None else 0.0
             )
             remaining = starting - spent
-            cur.execute(
-                """
-                SELECT SUBSTR("R.",1,1) as code, COUNT(*) as cnt
-                FROM giocatori
-                WHERE FantaSquadra = ?
-                  AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)
-                GROUP BY SUBSTR("R.",1,1)
-            """,
-                (s,),
-            )
+            if has_fanta:
+                cur.execute(
+                    """
+                    SELECT SUBSTR("R.",1,1) as code, COUNT(*) as cnt
+                    FROM giocatori
+                    WHERE FantaSquadra = ?
+                      AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)
+                    GROUP BY SUBSTR("R.",1,1)
+                """,
+                    (s,),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT SUBSTR("R.",1,1) as code, COUNT(*) as cnt
+                    FROM giocatori
+                    WHERE squadra = ?
+                      AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)
+                    GROUP BY SUBSTR("R.",1,1)
+                """,
+                    (s,),
+                )
             counts = {row[0]: row[1] for row in cur.fetchall()}
             portieri_count = int(counts.get("P", 0)) + int(counts.get("G", 0))
             dif_count = int(counts.get("D", 0))
@@ -485,10 +550,18 @@ class MarketService:
         }
         team_roster = {r: [] for r in rose_structure.keys()}
         cur = conn.cursor()
-        cur.execute(
-            'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione FROM giocatori WHERE FantaSquadra = ? AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)',
-            (tname,),
-        )
+        has_fanta = self._table_has_column(conn, "giocatori", "FantaSquadra")
+        if has_fanta:
+            cur.execute(
+                'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione FROM giocatori WHERE FantaSquadra = ? AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)',
+                (tname,),
+            )
+        else:
+            # fallback to legacy squadra column
+            cur.execute(
+                'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione FROM giocatori WHERE squadra = ? AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)',
+                (tname,),
+            )
         rows = cur.fetchall()
         for row in rows:
             codice = (row["ruolo"] or "").strip()

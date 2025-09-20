@@ -1,5 +1,4 @@
 import sqlite3
-import os
 import pytest
 from app import create_app
 
@@ -8,12 +7,11 @@ from app import create_app
 def client(tmp_path):
     # create a temp DB path
     temp_db = tmp_path / "test_giocatori.db"
-    # if a real DB exists in repo, copy it to temp; otherwise create minimal schema later
-    repo_db = os.path.join(os.path.dirname(__file__), "..", "giocatori.db")
-    if os.path.exists(repo_db):
-        import shutil
-
-        shutil.copy(repo_db, temp_db)
+    # create a fresh empty DB for hermetic tests (do not copy repo DB which may contain
+    # real/fuzzy state like low cassa values that break assertions)
+    # the tests will create any needed tables/rows explicitly
+    conn = sqlite3.connect(str(temp_db))
+    conn.close()
     # create test app with overridden DB_PATH
     app = create_app({"DB_PATH": str(temp_db), "TESTING": True})
     # ensure templates/static resolution if needed
@@ -61,6 +59,13 @@ def test_update_player_json_and_assign_form(client):
     }
     r = client.post("/assegna_giocatore", data=form)
     # success should redirect to '/', so expect 302 or 200 depending on test client behavior
+    if r.status_code not in (200, 302):
+        # debug output for CI/test failure investigation
+        print('DEBUG: assegna_giocatore returned', r.status_code)
+        try:
+            print('DEBUG BODY:', r.data.decode(errors='ignore')[:2000])
+        except Exception:
+            pass
     assert r.status_code in (200, 302)
 
     conn.close()

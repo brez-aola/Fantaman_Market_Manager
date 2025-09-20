@@ -1,6 +1,7 @@
 from pathlib import Path
 from openpyxl import load_workbook
 import re
+import json
 
 XLSX = Path("Rose_fantalega-darko-pancev.xlsx")
 if not XLSX.exists():
@@ -48,7 +49,5 @@ for k, v in proposed.items():
     print(f"  {k}:", v)
 
 # write mapping to a small JSON file for later import if you confirm
-import json
-
 Path("scripts/crediti_proposed.json").write_text(json.dumps(proposed, indent=2))
 print("\nWrote scripts/crediti_proposed.json")

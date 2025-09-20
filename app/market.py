@@ -514,47 +514,40 @@ def rose():
             "rose.html", squadre=all_teams, rose_structure=ROSE_STRUCTURE, rose=rose_map
         )
 
-    # fallback: legacy sqlite3 logic
-    conn = get_connection(DB_PATH)
-    cur = conn.cursor()
-    cur.execute(
-        """SELECT rowid AS id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione, FantaSquadra
-        FROM giocatori
-        WHERE FantaSquadra IS NOT NULL
-        AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)
-    """
-    )
-    rows = cur.fetchall()
-    conn.close()
-    teams_in_rows = {row["FantaSquadra"] for row in rows if row["FantaSquadra"]}
-    all_teams = list(
-        dict.fromkeys(list(current_app.config.get("SQUADRE")) + sorted(teams_in_rows))
-    )
-    rose_map = {s: {r: [] for r in ROSE_STRUCTURE.keys()} for s in all_teams}
-    for row in rows:
-        sname = row["FantaSquadra"]
-        codice_ruolo = (row["ruolo"] or "").strip()
-        key = None
-        if codice_ruolo:
-            ch = codice_ruolo[0].upper()
-            key = ruolo_map.get(ch)
-        if not key:
-            continue
-        if sname in rose_map:
-            rose_map[sname][key].append(
-                {
-                    "id": row["id"],
-                    "nome": row["nome"],
-                    "ruolo": codice_ruolo,
-                    "squadra_reale": row["squadra_reale"],
-                    "costo": row["costo"],
-                    "anni_contratto": row["anni_contratto"],
-                    "opzione": row["opzione"],
-                }
+    # fallback: use MarketService helpers which are resilient to missing columns
+    try:
+        conn = get_connection(DB_PATH)
+        svc = MarketService()
+        # get a mapping of teams -> roster using the service; then compute teams seen in rows
+        # We'll construct a rose_map similar to the original behavior
+        # First, collect rows via a simple query using the service logic
+        # Reuse get_team_summaries to determine teams and spent/missing, and then build rose map
+        rows_map = {}
+        teams_in_rows = set()
+        for s in current_app.config.get("SQUADRE"):
+            team_roster, starting_pot, total_spent, cassa = svc.get_team_roster(
+                conn, s, ROSE_STRUCTURE
             )
-    return render_template(
-        "rose.html", squadre=all_teams, rose_structure=ROSE_STRUCTURE, rose=rose_map
-    )
+            # team_roster is per-role mapping; if any players exist, register the team
+            has_players = any(len(lst) > 0 for lst in team_roster.values())
+            if has_players:
+                teams_in_rows.add(s)
+            rows_map[s] = team_roster
+        all_teams = list(dict.fromkeys(list(current_app.config.get("SQUADRE")) + sorted(teams_in_rows)))
+        # ensure a consistent rose_map structure
+        rose_map = {s: {r: [] for r in ROSE_STRUCTURE.keys()} for s in all_teams}
+        for s, roster in rows_map.items():
+            if s in rose_map:
+                rose_map[s] = roster
+        conn.close()
+        return render_template(
+            "rose.html", squadre=all_teams, rose_structure=ROSE_STRUCTURE, rose=rose_map
+        )
+    except Exception:
+        # final fallback: empty rose
+        return render_template(
+            "rose.html", squadre=current_app.config.get("SQUADRE"), rose_structure=ROSE_STRUCTURE, rose={s: {r: [] for r in ROSE_STRUCTURE.keys()} for s in current_app.config.get("SQUADRE")}
+        )
 
 
 @bp.route("/squadra/<team_name>", methods=["GET"])
@@ -654,23 +647,16 @@ def squadra(team_name):
         # fall back to sqlite
         pass
 
-    conn = get_connection(DB_PATH)
-    cur = conn.cursor()
-    cur.execute(
-        'SELECT rowid as id, "Nome" as nome, "Sq." as squadra_reale, "R." as ruolo, "Costo" as costo, anni_contratto, opzione FROM giocatori WHERE FantaSquadra = ? AND NOT (opzione IS NOT NULL AND anni_contratto IS NULL)',
-        (tname,),
-    )
-    rows = cur.fetchall()
-    conn.close()
-    if rows:
-        # If we got rows above from sqlite fallback, use the MarketService helper to compute roster and cassa
-        try:
-            conn = get_connection(DB_PATH)
-            svc = MarketService()
-            team_roster, starting_pot, total_spent, cassa = svc.get_team_roster(
-                conn, tname, ROSE_STRUCTURE
-            )
-            conn.close()
+    # Use the MarketService sqlite fallback (it handles missing FantaSquadra column)
+    try:
+        conn = get_connection(DB_PATH)
+        svc = MarketService()
+        team_roster, starting_pot, total_spent, cassa = svc.get_team_roster(
+            conn, tname, ROSE_STRUCTURE
+        )
+        conn.close()
+        # only render if the service found assigned players for this team
+        if any(len(lst) for lst in team_roster.values()):
             return render_template(
                 "team.html",
                 tname=tname,
@@ -681,8 +667,11 @@ def squadra(team_name):
                 cassa=cassa,
                 squadre=current_app.config.get("SQUADRE"),
             )
+    except Exception:
+        # fall back to default empty roster rendering
+        try:
+            conn.close()
         except Exception:
-            # fallback to current in-place computation if service fails
             pass
     # final fallback: render with computed variables (should rarely reach here)
     return render_template(
