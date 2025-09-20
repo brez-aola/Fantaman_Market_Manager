@@ -9,7 +9,7 @@ Create Date: 2025-09-16 19:28:33.137523
 """
 
 # revision identifiers, used by Alembic.
-revision = '581f0f59e94d'
+revision = "581f0f59e94d"
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -29,7 +29,6 @@ Edit this file later if you need to create conversion steps from the legacy
 `giocatori`/`fantateam` schema to the new ORM tables.
 """
 
-from alembic import op
 
 
 # revision identifiers, used by Alembic (kept from generated file)
@@ -38,15 +37,15 @@ from alembic import op
 
 
 def upgrade():
-        """No-op baseline upgrade.
+    """No-op baseline upgrade.
 
-        This intentionally does nothing so the database is not modified. Use
-        `alembic stamp head` to mark the DB as at this revision without running
-        migrations, or keep this file as the baseline for future migrations.
-        """
-        pass
+    This intentionally does nothing so the database is not modified. Use
+    `alembic stamp head` to mark the DB as at this revision without running
+    migrations, or keep this file as the baseline for future migrations.
+    """
+    pass
 
 
 def downgrade():
-        """No-op downgrade for baseline."""
-        pass
+    """No-op downgrade for baseline."""
+    pass

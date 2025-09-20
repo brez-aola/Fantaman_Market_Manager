@@ -9,11 +9,13 @@ Usage:
 
 It connects to `giocatori.db` by default (in repo root). It creates the ORM tables if they don't exist and then copies teams and players.
 """
+
 from __future__ import annotations
 
 import argparse
 import shutil
 import sqlite3
+from app.db import get_connection
 from pathlib import Path
 from typing import Tuple
 
@@ -23,6 +25,7 @@ from sqlalchemy.orm import sessionmaker
 # Ensure repo root is on sys.path so we can import `app.models` when running this script
 import sys
 from pathlib import Path as _Path
+
 _repo_root = _Path(__file__).resolve().parents[1]
 if str(_repo_root) not in sys.path:
     sys.path.insert(0, str(_repo_root))
@@ -92,7 +95,7 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
     copy_db(src_db, TMP_DB)
     print(f"Created temporary DB copy at: {TMP_DB}")
 
-    conn = sqlite3.connect(TMP_DB)
+    conn = get_connection(str(TMP_DB))
     teams_count, players_count = legacy_counts(conn)
     print(f"Legacy counts - teams: {teams_count}, players: {players_count}")
 
@@ -130,7 +133,9 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
                     players_table = p
                     break
 
-        print(f"Detected legacy tables: teams='{teams_table}', players='{players_table}'")
+        print(
+            f"Detected legacy tables: teams='{teams_table}', players='{players_table}'"
+        )
 
         # Copy teams
         migrated_teams = 0
@@ -155,10 +160,10 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
             cur.execute(q)
             for row in cur.fetchall():
                 row_d = dict(zip(cols, row))
-                team_name = row_d.get(name_col) or row_d.get('name') or 'Unknown'
+                team_name = row_d.get(name_col) or row_d.get("name") or "Unknown"
                 # prefer cassa_attuale or cassa_iniziale if present in legacy
                 team_cash = None
-                for cand in ('cassa_attuale', 'cassa_iniziale', cash_col):
+                for cand in ("cassa_attuale", "cassa_iniziale", cash_col):
                     if cand and cand in row_d and row_d.get(cand) is not None:
                         try:
                             team_cash = int(float(row_d.get(cand)))
@@ -217,10 +222,10 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
             for r in cur.fetchall():
                 existing_player_cols.add(r[1])
             needed = {
-                'costo': 'INTEGER',
-                'anni_contratto': 'INTEGER',
-                'opzione': 'TEXT',
-                'squadra_reale': 'TEXT',
+                "costo": "INTEGER",
+                "anni_contratto": "INTEGER",
+                "opzione": "TEXT",
+                "squadra_reale": "TEXT",
             }
             for col, coltype in needed.items():
                 if col not in existing_player_cols:
@@ -233,17 +238,27 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
             conn.commit()
             for row in legacy_rows:
                 row_d = dict(zip(cols, row))
-                player_name = row_d.get(name_col) or 'Unknown'
+                player_name = row_d.get(name_col) or "Unknown"
                 player_role = row_d.get(role_col)
                 team_ref = row_d.get(team_ref_col)
                 if dry_run:
                     migrated_players += 1
                 else:
-                    p = Player(name=str(player_name), role=str(player_role) if player_role else None)
+                    p = Player(
+                        name=str(player_name),
+                        role=str(player_role) if player_role else None,
+                    )
                     # populate new fields when available
                     try:
                         if costo_col and row_d.get(costo_col) is not None:
-                            p.costo = int(float(str(row_d.get(costo_col)).replace(',', '').replace('€','').strip()))
+                            p.costo = int(
+                                float(
+                                    str(row_d.get(costo_col))
+                                    .replace(",", "")
+                                    .replace("€", "")
+                                    .strip()
+                                )
+                            )
                     except Exception:
                         p.costo = None
                     try:
@@ -257,7 +272,10 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
                     except Exception:
                         p.opzione = None
                     try:
-                        if squadra_reale_col and row_d.get(squadra_reale_col) is not None:
+                        if (
+                            squadra_reale_col
+                            and row_d.get(squadra_reale_col) is not None
+                        ):
                             p.squadra_reale = str(row_d.get(squadra_reale_col))
                     except Exception:
                         p.squadra_reale = None
@@ -270,7 +288,11 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
                                 p.team_id = candidate.id
                         except Exception:
                             # try by name
-                            candidate = session.query(Team).filter(Team.name == str(team_ref)).first()
+                            candidate = (
+                                session.query(Team)
+                                .filter(Team.name == str(team_ref))
+                                .first()
+                            )
                             if candidate:
                                 p.team_id = candidate.id
                     session.add(p)
@@ -291,7 +313,9 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
             except Exception:
                 tcount = inserted_teams
                 pcount = inserted_players
-            print(f"Migration applied to temporary DB. Teams inserted: {inserted_teams} (orm={tcount}), Players inserted: {inserted_players} (orm={pcount}). Review and move the file to replace your original DB if desired.")
+            print(
+                f"Migration applied to temporary DB. Teams inserted: {inserted_teams} (orm={tcount}), Players inserted: {inserted_players} (orm={pcount}). Review and move the file to replace your original DB if desired."
+            )
         else:
             print("Dry-run completed. No changes written.")
     finally:
@@ -299,9 +323,13 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
         conn.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--apply', action='store_true', help='Actually write to the temporary DB (non-dry-run)')
-    parser.add_argument('--src', type=str, default=None, help='Path to legacy DB')
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Actually write to the temporary DB (non-dry-run)",
+    )
+    parser.add_argument("--src", type=str, default=None, help="Path to legacy DB")
     args = parser.parse_args()
     migrate(dry_run=not args.apply, src_db=Path(args.src) if args.src else None)
