@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Admin - Upload roster</title>
+    <link rel="stylesheet" href="/static/admin.css">
+  </head>
+  <body>
+    <h1>Upload roster (Rose_fantalega-...xlsx)</h1>
+    <form method="post" enctype="multipart/form-data">
+      <div>
+        <label>Excel file (TutteLeRose sheet):</label>
+        <input type="file" name="xlsx_file" accept=".xlsx">
+      </div>
+      <div>
+        <button type="submit" name="preview" value="1">Upload & Preview</button>
+        <button type="submit" name="apply" value="1">Upload & Apply</button>
+      </div>
+    </form>
+
+    {% if teams %}
+      {% if issues %}
+        <div class="issues">
+          <h3>Parsing issues</h3>
+          <ul>
+            {% for t, msg in issues %}
+              <li><strong>{{ t }}</strong>: {{ msg }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+      {% endif %}
+      <h2>Preview</h2>
+      <ul>
+        {% for t, players in teams.items() %}
+          <li><strong>{{ t }}</strong> — {{ players|length }} players
+            <ul>
+              {% for p in players[:10] %}
+                <li>{{ p['Nome'] }} ({{ p['Ruolo'] }}) — {{ p['Costo'] }}</li>
+              {% endfor %}
+            </ul>
+          </li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <p><a href="{{ url_for('admin.index') }}">Back</a></p>
+  </body>
+</html>

@@ -9,6 +9,7 @@ models defined in app/models.py to create tables.
 
 import os
 import sys
+
 # ensure repo root is on path
 HERE = os.path.dirname(os.path.dirname(__file__))
 if HERE not in sys.path:

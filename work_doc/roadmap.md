@@ -536,3 +536,28 @@ Trasformazione da POC a prodotto industriale in 4 fasi principali con focus su s
 - **Month 9-12**: Bug fixes, performance optimization, user feedback integration
 - **Year 2**: Mobile app, advanced analytics, AI/ML features
 - **Year 3**: Multi-tenant architecture, white-label solution
+
+---
+
+## Quick migration instructions
+
+To apply Alembic migrations and optionally run the legacy SQLite -> ORM migration script, a convenience helper is provided at `scripts/run_migrations.sh`.
+
+Usage examples (from WSL/bash):
+
+1) Dry-run legacy migration against a clone of the repo DB (safe):
+
+```bash
+./scripts/run_migrations.sh --dry-run --src /mnt/c/path/to/giocatori.clone.db
+```
+
+2) Apply Alembic migrations and perform the legacy migration (MAKE A BACKUP FIRST):
+
+```bash
+./scripts/run_migrations.sh --apply --src /mnt/c/path/to/giocatori.clone.db
+```
+
+Notes:
+- The script creates a temporary `alembic_tmp.ini` pointing at the selected DB and removes it after the run.
+- `scripts/migrate_legacy_to_orm.py` supports `--dry-run` and `--apply` flags; prefer `--dry-run` first to inspect changes.
+- Restoring branch protection and repository-level policies should be done through GitHub UI if programmatic restore fails due to API permissions.

@@ -72,6 +72,17 @@ jobs:
         with:
           python-version: '3.10'
 
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/pip/wheels
+            ~/.cache/pypoetry
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Wait for Postgres
         run: |
           for i in {1..30}; do
@@ -83,6 +94,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt || true
           pip install -r requirements-dev.txt || true
+
+      - name: Run pre-commit
+        run: |
+          pip install pre-commit
+          pre-commit run --all-files || true
 
       - name: Cache pip
         uses: actions/cache@v4
@@ -138,3 +154,58 @@ jobs:
         run: |
           # Run the CLI-focused unit test which invokes the migration script via subprocess
           pytest -q -m cli tests/test_migrate_sqlite_to_postgres.py::test_cli_verify_columns_per_table
+
+  lint:
+    name: Lint & static checks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.10]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/pip/wheels
+            ~/.cache/pypoetry
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt || true
+
+      - name: Run pre-commit
+        run: |
+          pip install pre-commit
+          pre-commit run --all-files
+
+      - name: Ruff (linter)
+        run: |
+          pip install ruff
+          ruff check .
+
+      - name: Black check
+        run: |
+          pip install black
+          black --check .
+
+      - name: isort check
+        run: |
+          pip install isort
+          isort --check-only .
+
+      - name: mypy
+        run: |
+          pip install mypy
+          mypy . || true

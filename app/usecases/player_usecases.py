@@ -1,4 +1,5 @@
 from typing import List
+
 from app.domain.models import Player
 from app.repositories.repository import PlayerRepository
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-import shutil
-import os
 import datetime
-import unicodedata
+import os
 import re
+import shutil
+import unicodedata
+
 from app.db import get_connection
 
 DB = os.path.join(os.path.dirname(__file__), "giocatori.db")

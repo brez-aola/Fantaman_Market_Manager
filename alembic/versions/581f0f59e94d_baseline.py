@@ -30,7 +30,6 @@ Edit this file later if you need to create conversion steps from the legacy
 """
 
 
-
 # revision identifiers, used by Alembic (kept from generated file)
 # revision = '581f0f59e94d'
 # down_revision = None

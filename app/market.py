@@ -1,7 +1,8 @@
-from flask import Blueprint, render_template, current_app, request
-from app.db import get_connection
-from flask import redirect, jsonify
 import urllib.parse
+
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request
+
+from app.db import get_connection
 from app.services.market_service import MarketService
 
 bp = Blueprint("market", __name__)
@@ -236,10 +237,12 @@ def index():
         if SessionLocal:
             session = SessionLocal()
             try:
-                from .models import Team, Player
+                from .models import Player
 
                 for s in SQUADRE:
-                    team_obj = session.query(Team).filter(Team.name == s).first()
+                    from app.utils.team_utils import resolve_team_by_alias
+
+                    team_obj = resolve_team_by_alias(session, s)
                     starting = (
                         float(team_obj.cash)
                         if team_obj and team_obj.cash is not None
@@ -267,12 +270,14 @@ def index():
                             costo_val = 0.0
                         spent += costo_val
                         rcode = (p.role or "")[:1].upper() if p.role else ""
-                            # normalize legacy goalkeeper code 'G' to 'P'
+                        # normalize legacy goalkeeper code 'G' to 'P'
                         if rcode == "G":
                             rcode = "P"
                         counts[rcode] = counts.get(rcode, 0) + 1
                         # goalkeeper counts: 'G' treated as 'P' if present in DB
-                        portieri_count = int(counts.get("P", 0)) + int(counts.get("G", 0))
+                        portieri_count = int(counts.get("P", 0)) + int(
+                            counts.get("G", 0)
+                        )
                     dif_count = int(counts.get("D", 0))
                     cen_count = int(counts.get("C", 0))
                     att_count = int(counts.get("A", 0))
@@ -533,7 +538,11 @@ def rose():
             if has_players:
                 teams_in_rows.add(s)
             rows_map[s] = team_roster
-        all_teams = list(dict.fromkeys(list(current_app.config.get("SQUADRE")) + sorted(teams_in_rows)))
+        all_teams = list(
+            dict.fromkeys(
+                list(current_app.config.get("SQUADRE")) + sorted(teams_in_rows)
+            )
+        )
         # ensure a consistent rose_map structure
         rose_map = {s: {r: [] for r in ROSE_STRUCTURE.keys()} for s in all_teams}
         for s, roster in rows_map.items():
@@ -546,7 +555,13 @@ def rose():
     except Exception:
         # final fallback: empty rose
         return render_template(
-            "rose.html", squadre=current_app.config.get("SQUADRE"), rose_structure=ROSE_STRUCTURE, rose={s: {r: [] for r in ROSE_STRUCTURE.keys()} for s in current_app.config.get("SQUADRE")}
+            "rose.html",
+            squadre=current_app.config.get("SQUADRE"),
+            rose_structure=ROSE_STRUCTURE,
+            rose={
+                s: {r: [] for r in ROSE_STRUCTURE.keys()}
+                for s in current_app.config.get("SQUADRE")
+            },
         )
 
 
@@ -570,9 +585,11 @@ def squadra(team_name):
         if SessionLocal:
             session = SessionLocal()
             try:
-                from .models import Team, Player
+                from app.utils.team_utils import resolve_team_by_alias
 
-                team_obj = session.query(Team).filter(Team.name == tname).first()
+                from .models import Player
+
+                team_obj = resolve_team_by_alias(session, tname)
                 if team_obj:
                     players = team_obj.players
                 else:
@@ -617,7 +634,7 @@ def squadra(team_name):
                         conn_check = get_connection(DB_PATH)
                         cur_check = conn_check.cursor()
                         cur_check.execute(
-                            'SELECT 1 FROM giocatori WHERE FantaSquadra = ? LIMIT 1',
+                            "SELECT 1 FROM giocatori WHERE FantaSquadra = ? LIMIT 1",
                             (tname,),
                         )
                         if cur_check.fetchone():

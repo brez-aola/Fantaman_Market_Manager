@@ -1,7 +1,8 @@
-from pathlib import Path
-from openpyxl import load_workbook
-import re
 import json
+import re
+from pathlib import Path
+
+from openpyxl import load_workbook
 
 XLSX = Path("Rose_fantalega-darko-pancev.xlsx")
 if not XLSX.exists():

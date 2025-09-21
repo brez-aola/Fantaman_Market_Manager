@@ -1,6 +1,8 @@
-from app.db import get_connection
-import pandas as pd
 import os
+
+import pandas as pd
+
+from app.db import get_connection
 
 # Percorso del file Excel
 excel_path = os.path.join(

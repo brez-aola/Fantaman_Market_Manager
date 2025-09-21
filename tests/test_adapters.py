@@ -1,14 +1,15 @@
 import pytest
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.models import Base, Team as ORMTeam, Player as ORMPlayer
 from app.adapters.sqlalchemy_repository import (
     SQLAlchemyPlayerRepository,
     SQLAlchemyTeamRepository,
 )
 from app.domain.models import Player as DomainPlayer
+from app.models import Base
+from app.models import Player as ORMPlayer
+from app.models import Team as ORMTeam
 
 
 @pytest.fixture

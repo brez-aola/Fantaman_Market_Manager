@@ -1,5 +1,6 @@
 import sqlite3
 import tempfile
+
 from app import create_app
 
 
@@ -13,7 +14,9 @@ def test_assign_integration_shows_on_team_page(tmp_path):
         'CREATE TABLE IF NOT EXISTS giocatori ("Nome" TEXT, squadra TEXT, "Costo" REAL, "anni_contratto" INTEGER, opzione TEXT, "Sq." TEXT, "R." TEXT)'
     )
     # insert one player
-    cur.execute('INSERT INTO giocatori("Nome", "R.") VALUES (?, ?)', ("Integration Player", "A"))
+    cur.execute(
+        'INSERT INTO giocatori("Nome", "R.") VALUES (?, ?)', ("Integration Player", "A")
+    )
     pid = cur.lastrowid
     conn.commit()
     conn.close()
@@ -63,7 +66,7 @@ def test_assignment_shows_on_team_page():
         cur = conn.cursor()
         # create minimal tables required for assignment
         cur.execute(
-            'CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL, cassa_iniziale REAL, cassa_attuale REAL)'
+            "CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL, cassa_iniziale REAL, cassa_attuale REAL)"
         )
         cur.execute(
             "INSERT OR REPLACE INTO fantateam(squadra, carryover, cassa_iniziale, cassa_attuale) VALUES (?,?,?,?)",
@@ -72,13 +75,21 @@ def test_assignment_shows_on_team_page():
         cur.execute(
             'CREATE TABLE IF NOT EXISTS giocatori ("Nome" TEXT, squadra TEXT, "R." TEXT, "Costo" REAL, anni_contratto INTEGER, opzione TEXT)'
         )
-        cur.execute('INSERT INTO giocatori("Nome", "R.") VALUES (?,?)', ("INT_TEST_PLAYER", "C"))
+        cur.execute(
+            'INSERT INTO giocatori("Nome", "R.") VALUES (?,?)', ("INT_TEST_PLAYER", "C")
+        )
         pid = cur.lastrowid
         conn.commit()
         conn.close()
 
         squadre = client.application.config["SQUADRE"]
-        form = {"id": pid, "squadra": squadre[0], "costo": "1", "anni_contratto": "1", "opzione": "on"}
+        form = {
+            "id": pid,
+            "squadra": squadre[0],
+            "costo": "1",
+            "anni_contratto": "1",
+            "opzione": "on",
+        }
         resp = client.post("/assegna_giocatore", data=form, follow_redirects=False)
         assert resp.status_code in (301, 302, 302, 303, 200)
 

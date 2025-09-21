@@ -1,7 +1,9 @@
 import sys
 from pathlib import Path
-from app.db import get_connection
+
 from openpyxl import load_workbook
+
+from app.db import get_connection
 
 DB = Path("/mnt/c/work/fantacalcio/giocatori.db")
 XLSX = (
@@ -76,7 +78,11 @@ for r in rows[5:]:
                 {
                     "Nome": name,
                     # normalize role code: store single-letter canonical code
-                    "Ruolo": ((role or "").strip()[:1].upper().replace("G", "P")) if role else "",
+                    "Ruolo": (
+                        ((role or "").strip()[:1].upper().replace("G", "P"))
+                        if role
+                        else ""
+                    ),
                     "Sq.": (squadra_reale or "").strip() if squadra_reale else "",
                     "Costo": c,
                 }
@@ -207,3 +213,21 @@ conn.commit()
 conn.close()
 
 print("\nSummary: inserted=", inserted, "updated=", updated, "skipped=", notfound)
+
+# Populate team aliases using the new helper (SQLAlchemy)
+try:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.utils.team_utils import populate_team_aliases
+
+    engine = create_engine(f"sqlite:///{DB}")
+    Session = sessionmaker(bind=engine)
+    s = Session()
+    try:
+        created = populate_team_aliases(s, source="fantateam")
+        print("Created aliases:", len(created))
+    finally:
+        s.close()
+except Exception as e:
+    print("Failed to populate aliases:", e)

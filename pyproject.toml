@@ -1,12 +1,34 @@
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [tool.black]
 line-length = 88
+target-version = ['py310']
 
 [tool.isort]
 profile = "black"
+line_length = 88
+known_first_party = ["app", "scripts", "tests"]
+multi_line_output = 3
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503"]
+exclude = [".venv", "__pycache__", "build", "dist", "venv", "giocatori.db*", "*.pyc", "*.sqlite"]
+
+[tool.mypy]
+python_version = 3.10
+files = ["app", "scripts", "tests"]
+ignore_missing_imports = true
+strict = false
+
+[tool.poetry]
+name = "fantacalcio-market-manager"
+version = "0.1.0"
+description = "Manager for fantasy football market operations"
+authors = [""]
+license = "MIT"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [tool.pytest]
 minversion = "7.0"

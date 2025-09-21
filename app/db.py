@@ -5,8 +5,8 @@ and a default path. Scripts and modules should call `get_connection(db_path=None
 we can change creation logic in one place later (for example to switch to SQLAlchemy).
 """
 
-import sqlite3
 import os
+import sqlite3
 from typing import Optional
 
 

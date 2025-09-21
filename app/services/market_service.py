@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 
 class InsufficientFunds(Exception):
@@ -60,7 +60,9 @@ class MarketService:
             squadra_val = squadra
         return squadra_val, costo_val, anni_contratto, opzione
 
-    def _table_has_column(self, conn: sqlite3.Connection, table: str, column: str) -> bool:
+    def _table_has_column(
+        self, conn: sqlite3.Connection, table: str, column: str
+    ) -> bool:
         """Return True if the given column exists in the table on this connection."""
         cur = conn.cursor()
         try:
@@ -210,7 +212,10 @@ class MarketService:
         # Read legacy `squadra` and optionally `FantaSquadra` if the column exists
         has_fanta = self._table_has_column(conn, "giocatori", "FantaSquadra")
         if has_fanta:
-            cur.execute('SELECT "squadra", "FantaSquadra", Costo FROM giocatori WHERE rowid=?', (id,))
+            cur.execute(
+                'SELECT "squadra", "FantaSquadra", Costo FROM giocatori WHERE rowid=?',
+                (id,),
+            )
             prev = cur.fetchone()
             prev_team = None
             prev_cost = 0.0
@@ -316,7 +321,10 @@ class MarketService:
         # read legacy `squadra` and optionally `FantaSquadra` if the column exists
         has_fanta = self._table_has_column(conn, "giocatori", "FantaSquadra")
         if has_fanta:
-            cur.execute('SELECT "squadra", "FantaSquadra", Costo FROM giocatori WHERE rowid=?', (pid,))
+            cur.execute(
+                'SELECT "squadra", "FantaSquadra", Costo FROM giocatori WHERE rowid=?',
+                (pid,),
+            )
             prev = cur.fetchone()
             prev_team = None
             prev_cost = 0.0

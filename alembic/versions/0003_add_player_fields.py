@@ -5,8 +5,9 @@ Revises: 0002_create_orm_tables
 Create Date: 2025-09-17
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0003_add_player_fields"

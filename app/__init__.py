@@ -1,5 +1,6 @@
-from flask import Flask
 import os
+
+from flask import Flask
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -32,6 +33,8 @@ def create_app(test_config=None):
         ],
         SECRET_KEY="dev",
         SQLALCHEMY_DATABASE_URI=None,
+        ADMIN_USER="admin",
+        ADMIN_PASS="admin",
     )
 
     if test_config:
@@ -55,12 +58,14 @@ def create_app(test_config=None):
 
     # register blueprints
     try:
+        from .admin import bp as admin_bp
         from .api import bp as api_bp
         from .market import bp as market_bp
         from .teams import bp as teams_bp
 
         app.register_blueprint(api_bp, url_prefix="/api")
         app.register_blueprint(market_bp)
+        app.register_blueprint(admin_bp)
         app.register_blueprint(teams_bp)
     except Exception:
         # keep failing registration quiet for now; files may be moved later

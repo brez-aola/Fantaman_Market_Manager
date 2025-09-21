@@ -15,16 +15,17 @@ from __future__ import annotations
 import argparse
 import shutil
 import sqlite3
-from app.db import get_connection
+
+# Ensure repo root is on sys.path so we can import `app.models` when running this script
+import sys
 from pathlib import Path
+from pathlib import Path as _Path
 from typing import Tuple
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-# Ensure repo root is on sys.path so we can import `app.models` when running this script
-import sys
-from pathlib import Path as _Path
+from app.db import get_connection
 
 _repo_root = _Path(__file__).resolve().parents[1]
 if str(_repo_root) not in sys.path:
@@ -32,7 +33,7 @@ if str(_repo_root) not in sys.path:
 
 # Import models from app
 try:
-    from app.models import Base, Team, Player
+    from app.models import Base, Player, Team
 except Exception as e:
     raise RuntimeError("Unable to import ORM models from app.models: " + str(e))
 
@@ -281,18 +282,16 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
                         p.squadra_reale = None
                     # try to link to team by name or id
                     if team_ref is not None:
-                        # if team_ref is numeric, try to find team by id, else by name
+                        # if team_ref is numeric, try to find team by id, else resolve by alias/name
                         try:
                             candidate = session.query(Team).get(int(team_ref))
                             if candidate:
                                 p.team_id = candidate.id
                         except Exception:
-                            # try by name
-                            candidate = (
-                                session.query(Team)
-                                .filter(Team.name == str(team_ref))
-                                .first()
-                            )
+                            # try by alias/name using resolver
+                            from app.utils.team_utils import resolve_team_by_alias
+
+                            candidate = resolve_team_by_alias(session, str(team_ref))
                             if candidate:
                                 p.team_id = candidate.id
                     session.add(p)

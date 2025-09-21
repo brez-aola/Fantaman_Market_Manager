@@ -1,4 +1,5 @@
-from flask import Blueprint, render_template, current_app
+from flask import Blueprint, current_app, render_template
+
 from app.db import get_connection
 from app.services.market_service import MarketService
 
@@ -22,9 +23,11 @@ def team_page(team_name):
         if SessionLocal:
             session = SessionLocal()
             try:
-                from .models import Team, Player
+                from app.utils.team_utils import resolve_team_by_alias
 
-                team_obj = session.query(Team).filter(Team.name == team_name).first()
+                from .models import Player
+
+                team_obj = resolve_team_by_alias(session, team_name)
                 if team_obj:
                     players = team_obj.players
                 else:
@@ -72,7 +75,7 @@ def team_page(team_name):
                         conn_check = get_connection(DB_PATH)
                         cur_check = conn_check.cursor()
                         cur_check.execute(
-                            'SELECT 1 FROM giocatori WHERE FantaSquadra = ? LIMIT 1',
+                            "SELECT 1 FROM giocatori WHERE FantaSquadra = ? LIMIT 1",
                             (team_name,),
                         )
                         if cur_check.fetchone():

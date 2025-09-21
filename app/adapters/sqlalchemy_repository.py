@@ -1,9 +1,12 @@
 from typing import List, Optional
+
 from sqlalchemy.orm import Session
 
+from app.domain.models import Player as DomainPlayer
+from app.domain.models import Team as DomainTeam
+from app.models import Player as ORMPlayer
+from app.models import Team as ORMTeam
 from app.repositories.repository import PlayerRepository, TeamRepository
-from app.domain.models import Player as DomainPlayer, Team as DomainTeam
-from app.models import Player as ORMPlayer, Team as ORMTeam
 
 
 def _map_player(orm: ORMPlayer) -> DomainPlayer:

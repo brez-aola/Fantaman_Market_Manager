@@ -1,8 +1,9 @@
-import sqlite3
-import shutil
-import tempfile
 import os
+import shutil
+import sqlite3
+import tempfile
 import threading
+
 import pytest
 
 # Quick smoke test for fantateam cassa atomic operations

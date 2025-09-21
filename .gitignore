@@ -1,3 +1,58 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtualenv
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
+flask.log
+flask.out
+app.log
+
+# Database files / backups
+giocatori.db
+giocatori.db.*
+*.sqlite
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# PyCharm
+.idea/
+
+# Node modules (if front-end added later)
+node_modules/
 # Python
 __pycache__/
 *.py[cod]
