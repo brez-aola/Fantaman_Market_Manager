@@ -24,6 +24,7 @@ except Exception:
     rf_process = None
 
 from difflib import get_close_matches
+
 from openpyxl import load_workbook
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -84,12 +85,27 @@ def extract_team_names_from_roster(path: Path) -> List[str]:
         # find header row and candidate columns
         header_row = None
         for r in ws.iter_rows(min_row=1, max_row=6, values_only=True):
-            if any(isinstance(c, str) and ("squadra" in c.lower() or "team" in c.lower() or "rosa" in c.lower()) for c in r if c):
+            if any(
+                isinstance(c, str)
+                and (
+                    "squadra" in c.lower() or "team" in c.lower() or "rosa" in c.lower()
+                )
+                for c in r
+                if c
+            ):
                 header_row = r
                 break
         if header_row:
             # find indices with likely team header
-            idxs = [i for i, c in enumerate(header_row) if c and isinstance(c, str) and ("squadra" in c.lower() or "team" in c.lower() or "rosa" in c.lower())]
+            idxs = [
+                i
+                for i, c in enumerate(header_row)
+                if c
+                and isinstance(c, str)
+                and (
+                    "squadra" in c.lower() or "team" in c.lower() or "rosa" in c.lower()
+                )
+            ]
             if not idxs:
                 continue
             # read values from that column
@@ -105,9 +121,16 @@ def extract_team_names_from_roster(path: Path) -> List[str]:
             break
         else:
             # fallback: scan first 200 rows for probable team-like short strings
-            for row in ws.iter_rows(min_row=1, max_row=200, max_col=6, values_only=True):
+            for row in ws.iter_rows(
+                min_row=1, max_row=200, max_col=6, values_only=True
+            ):
                 for v in row:
-                    if v and isinstance(v, str) and len(v) < 80 and is_probable_team_name(v):
+                    if (
+                        v
+                        and isinstance(v, str)
+                        and len(v) < 80
+                        and is_probable_team_name(v)
+                    ):
                         names.add(v.strip())
             # fallback only first sheet
             break
@@ -115,7 +138,7 @@ def extract_team_names_from_roster(path: Path) -> List[str]:
 
 
 def load_existing_teams(session) -> List[str]:
-    from app.models import Team, CanonicalMapping
+    from app.models import CanonicalMapping, Team
 
     teams = [t.name for t in session.query(Team).all()]
     # include canonical mapping targets too
@@ -160,7 +183,7 @@ def main(threshold: float = 0.6):
     # load real clubs if present
     real_clubs = set()
     if REAL_CLUBS_FILE.exists():
-        for ln in REAL_CLUBS_FILE.read_text(encoding='utf-8').splitlines():
+        for ln in REAL_CLUBS_FILE.read_text(encoding="utf-8").splitlines():
             ln = ln.strip()
             if ln:
                 real_clubs.add(ln)
@@ -199,5 +222,5 @@ def main(threshold: float = 0.6):
     print(f"Wrote {OUT_ALL}, {OUT_HIGH}, {OUT_LOW} (threshold={threshold})")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

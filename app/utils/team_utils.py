@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Optional
-from sqlalchemy.orm import Session
-from app.models import Team, TeamAlias, League
 from difflib import get_close_matches
-from typing import List
+from typing import List, Optional
+
+from sqlalchemy.orm import Session
+
+from app.models import League, Team, TeamAlias
 
 try:
     from rapidfuzz import process as rf_process
@@ -17,7 +18,9 @@ def _normalize_alias(s: str) -> str:
     return " ".join(s.split()).strip()
 
 
-def resolve_team_by_alias(session: Session, name: str, league_slug: Optional[str] = None) -> Optional[Team]:
+def resolve_team_by_alias(
+    session: Session, name: str, league_slug: Optional[str] = None
+) -> Optional[Team]:
     """Resolve a Team by an alias or canonical name.
 
     Priority:
@@ -36,7 +39,11 @@ def resolve_team_by_alias(session: Session, name: str, league_slug: Optional[str
             league_id = league.id
     # 1
     if league_id:
-        t = session.query(Team).filter(Team.name == q_name, Team.league_id == league_id).first()
+        t = (
+            session.query(Team)
+            .filter(Team.name == q_name, Team.league_id == league_id)
+            .first()
+        )
         if t:
             return t
     # 2
@@ -60,7 +67,9 @@ def resolve_team_by_alias(session: Session, name: str, league_slug: Optional[str
     return None
 
 
-def populate_team_aliases(session: Session, source: str = "fantateam", fuzzy_threshold: float = 0.6) -> List[TeamAlias]:
+def populate_team_aliases(
+    session: Session, source: str = "fantateam", fuzzy_threshold: float = 0.6
+) -> List[TeamAlias]:
     """Populate `team_aliases` table by deriving aliases from a legacy source.
 
     Strategy:
@@ -82,11 +91,16 @@ def populate_team_aliases(session: Session, source: str = "fantateam", fuzzy_thr
         canonical_map = {}
     # fetch source rows
     import sqlalchemy as sa
+
     if source == "fantateam":
-        rows = session.execute(sa.text("SELECT squadra, cassa_attuale, cassa_iniziale FROM fantateam")).fetchall()
+        rows = session.execute(
+            sa.text("SELECT squadra, cassa_attuale, cassa_iniziale FROM fantateam")
+        ).fetchall()
     else:
         # Example: other sources could be added later
-        rows = session.execute(sa.text("SELECT squadra, cassa_attuale, cassa_iniziale FROM fantateam")).fetchall()
+        rows = session.execute(
+            sa.text("SELECT squadra, cassa_attuale, cassa_iniziale FROM fantateam")
+        ).fetchall()
 
     # Build map cash -> team id (could be many to one)
     teams = session.query(Team).all()
@@ -96,13 +110,15 @@ def populate_team_aliases(session: Session, source: str = "fantateam", fuzzy_thr
         cash_map.setdefault(t.cash, []).append(t)
 
     for r in rows:
-        raw_alias = (r[0] or "")
+        raw_alias = r[0] or ""
         alias_name = _normalize_alias(raw_alias)
         if not alias_name:
             continue
         cash_val = None
         try:
-            cash_val = int(float(r[1] if r[1] is not None else (r[2] if r[2] is not None else 0)))
+            cash_val = int(
+                float(r[1] if r[1] is not None else (r[2] if r[2] is not None else 0))
+            )
         except Exception:
             cash_val = None
 
@@ -120,21 +136,33 @@ def populate_team_aliases(session: Session, source: str = "fantateam", fuzzy_thr
                     # rapidfuzz returns (match, score, index)
                     best = rf_process.extractOne(alias_name, cand_names)
                     if best and best[1] / 100.0 >= fuzzy_threshold:
-                        matched_team = next((c for c in candidates if c.name == best[0]), None)
+                        matched_team = next(
+                            (c for c in candidates if c.name == best[0]), None
+                        )
                 else:
-                    best = get_close_matches(alias_name, cand_names, n=1, cutoff=fuzzy_threshold)
+                    best = get_close_matches(
+                        alias_name, cand_names, n=1, cutoff=fuzzy_threshold
+                    )
                     if best:
-                        matched_team = next((c for c in candidates if c.name == best[0]), None)
+                        matched_team = next(
+                            (c for c in candidates if c.name == best[0]), None
+                        )
         # 2) fuzzy global match fallback
         if matched_team is None:
             if rf_process:
                 best_global = rf_process.extractOne(alias_name, name_list)
                 if best_global and best_global[1] / 100.0 >= fuzzy_threshold:
-                    matched_team = session.query(Team).filter(Team.name == best_global[0]).first()
+                    matched_team = (
+                        session.query(Team).filter(Team.name == best_global[0]).first()
+                    )
             else:
-                best_global = get_close_matches(alias_name, name_list, n=1, cutoff=fuzzy_threshold)
+                best_global = get_close_matches(
+                    alias_name, name_list, n=1, cutoff=fuzzy_threshold
+                )
                 if best_global:
-                    matched_team = session.query(Team).filter(Team.name == best_global[0]).first()
+                    matched_team = (
+                        session.query(Team).filter(Team.name == best_global[0]).first()
+                    )
 
         if matched_team:
             # apply canonical mapping override

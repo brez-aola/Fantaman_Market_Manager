@@ -4,7 +4,16 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from sqlalchemy import MetaData, Table, Column, Integer, String, create_engine, insert, select
+from sqlalchemy import (
+    Column,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    create_engine,
+    insert,
+    select,
+)
 
 from scripts import migrate_sqlite_to_postgres as migr
 
@@ -19,16 +28,30 @@ def test_copy_table_dry_run_and_sample(tmp_path, monkeypatch):
         src_engine = create_engine(src_url)
 
         md = MetaData()
-        t = Table("mytable", md, Column("id", Integer, primary_key=True), Column("name", String))
+        t = Table(
+            "mytable",
+            md,
+            Column("id", Integer, primary_key=True),
+            Column("name", String),
+        )
         md.create_all(bind=src_engine)
 
         with src_engine.begin() as conn:
-            conn.execute(insert(t), [{"id": 1, "name": "alice"}, {"id": 2, "name": "bob"}, {"id": 3, "name": "carol"}])
+            conn.execute(
+                insert(t),
+                [
+                    {"id": 1, "name": "alice"},
+                    {"id": 2, "name": "bob"},
+                    {"id": 3, "name": "carol"},
+                ],
+            )
 
         # target engine can be an in-memory sqlite (not used in dry-run)
         tgt_engine = create_engine("sqlite:///:memory:")
 
-        src_cnt, inserted, skipped = migr.copy_table(src_engine, tgt_engine, "mytable", dry_run=True, sample=2)
+        src_cnt, inserted, skipped = migr.copy_table(
+            src_engine, tgt_engine, "mytable", dry_run=True, sample=2
+        )
 
         assert src_cnt == 3
         assert inserted == 0
@@ -48,20 +71,34 @@ def test_copy_table_apply_inserts(tmp_path):
     src_engine = create_engine(src_url)
 
     md_src = MetaData()
-    t_src = Table("items", md_src, Column("id", Integer, primary_key=True), Column("value", String))
+    t_src = Table(
+        "items",
+        md_src,
+        Column("id", Integer, primary_key=True),
+        Column("value", String),
+    )
     md_src.create_all(bind=src_engine)
     with src_engine.begin() as conn:
-        conn.execute(insert(t_src), [{"id": 10, "value": "x"}, {"id": 11, "value": "y"}])
+        conn.execute(
+            insert(t_src), [{"id": 10, "value": "x"}, {"id": 11, "value": "y"}]
+        )
 
     # create target sqlite file and same table
     tgt_file = tmp_path / "tgt_apply.db"
     tgt_url = f"sqlite:///{tgt_file}"
     tgt_engine = create_engine(tgt_url)
     md_tgt = MetaData()
-    t_tgt = Table("items", md_tgt, Column("id", Integer, primary_key=True), Column("value", String))
+    t_tgt = Table(
+        "items",
+        md_tgt,
+        Column("id", Integer, primary_key=True),
+        Column("value", String),
+    )
     md_tgt.create_all(bind=tgt_engine)
 
-    src_cnt, inserted, skipped = migr.copy_table(src_engine, tgt_engine, "items", dry_run=False, sample=0)
+    src_cnt, inserted, skipped = migr.copy_table(
+        src_engine, tgt_engine, "items", dry_run=False, sample=0
+    )
 
     # Two rows existed in source
     assert src_cnt == 2
@@ -113,20 +150,36 @@ def test_verify_table_checksums_match(tmp_path):
     src_engine = create_engine(src_url)
 
     md = MetaData()
-    t = Table("things", md, Column("id", Integer, primary_key=True), Column("a", String), Column("b", String))
+    t = Table(
+        "things",
+        md,
+        Column("id", Integer, primary_key=True),
+        Column("a", String),
+        Column("b", String),
+    )
     md.create_all(bind=src_engine)
     with src_engine.begin() as c:
-        c.execute(insert(t), [{"id": 1, "a": "x", "b": "y"}, {"id": 2, "a": "p", "b": "q"}])
+        c.execute(
+            insert(t), [{"id": 1, "a": "x", "b": "y"}, {"id": 2, "a": "p", "b": "q"}]
+        )
 
     # create target sqlite with identical rows
     tgt_file = tmp_path / "tgt_verify.db"
     tgt_url = f"sqlite:///{tgt_file}"
     tgt_engine = create_engine(tgt_url)
     md2 = MetaData()
-    t2 = Table("things", md2, Column("id", Integer, primary_key=True), Column("a", String), Column("b", String))
+    t2 = Table(
+        "things",
+        md2,
+        Column("id", Integer, primary_key=True),
+        Column("a", String),
+        Column("b", String),
+    )
     md2.create_all(bind=tgt_engine)
     with tgt_engine.begin() as c:
-        c.execute(insert(t2), [{"id": 1, "a": "x", "b": "y"}, {"id": 2, "a": "p", "b": "q"}])
+        c.execute(
+            insert(t2), [{"id": 1, "a": "x", "b": "y"}, {"id": 2, "a": "p", "b": "q"}]
+        )
 
     # import the verify function from the script
     from scripts.migrate_sqlite_to_postgres import verify_table
@@ -146,7 +199,13 @@ def test_verify_fail_exit_on_mismatch(tmp_path):
 
     md = MetaData()
     # Use a table that the migration script actually processes
-    t = Table("canonical_mappings", md, Column("id", Integer, primary_key=True), Column("variant", String), Column("canonical", String))
+    t = Table(
+        "canonical_mappings",
+        md,
+        Column("id", Integer, primary_key=True),
+        Column("variant", String),
+        Column("canonical", String),
+    )
     md.create_all(bind=src_engine)
     with src_engine.begin() as c:
         c.execute(insert(t), [{"id": 1, "variant": "v1", "canonical": "c1"}])
@@ -156,13 +215,23 @@ def test_verify_fail_exit_on_mismatch(tmp_path):
     tgt_url = f"sqlite:///{tgt_file}"
     tgt_engine = create_engine(tgt_url)
     md2 = MetaData()
-    t2 = Table("canonical_mappings", md2, Column("id", Integer, primary_key=True), Column("variant", String), Column("canonical", String))
+    t2 = Table(
+        "canonical_mappings",
+        md2,
+        Column("id", Integer, primary_key=True),
+        Column("variant", String),
+        Column("canonical", String),
+    )
     md2.create_all(bind=tgt_engine)
     with tgt_engine.begin() as c:
         c.execute(insert(t2), [{"id": 1, "variant": "v1", "canonical": "DIFFERENT"}])
 
     # run the migration script with --verify --verify-fail; point to local DBs
-    script = Path(__file__).resolve().parents[1] / "scripts" / "migrate_sqlite_to_postgres.py"
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "migrate_sqlite_to_postgres.py"
+    )
     cmd = [
         "python3",
         str(script),
@@ -178,7 +247,9 @@ def test_verify_fail_exit_on_mismatch(tmp_path):
     # Run and expect a non-zero exit (2) due to verification mismatch
     import subprocess
 
-    proc = subprocess.run(cmd, input=b"yes\n", stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.run(
+        cmd, input=b"yes\n", stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
     assert proc.returncode != 0
 
 
@@ -187,19 +258,37 @@ def test_verify_columns_exclude_column(tmp_path):
     src_file = tmp_path / "src_cols.db"
     src_engine = create_engine(f"sqlite:///{src_file}")
     md = MetaData()
-    t = Table("canonical_mappings", md, Column("id", Integer, primary_key=True), Column("variant", String), Column("canonical", String), Column("volatile", String))
+    t = Table(
+        "canonical_mappings",
+        md,
+        Column("id", Integer, primary_key=True),
+        Column("variant", String),
+        Column("canonical", String),
+        Column("volatile", String),
+    )
     md.create_all(bind=src_engine)
     with src_engine.begin() as c:
-        c.execute(insert(t), [{"id": 1, "variant": "v1", "canonical": "c1", "volatile": "a"}])
+        c.execute(
+            insert(t), [{"id": 1, "variant": "v1", "canonical": "c1", "volatile": "a"}]
+        )
 
     tgt_file = tmp_path / "tgt_cols.db"
     tgt_engine = create_engine(f"sqlite:///{tgt_file}")
     md2 = MetaData()
-    t2 = Table("canonical_mappings", md2, Column("id", Integer, primary_key=True), Column("variant", String), Column("canonical", String), Column("volatile", String))
+    t2 = Table(
+        "canonical_mappings",
+        md2,
+        Column("id", Integer, primary_key=True),
+        Column("variant", String),
+        Column("canonical", String),
+        Column("volatile", String),
+    )
     md2.create_all(bind=tgt_engine)
     with tgt_engine.begin() as c:
         # same except volatile differs
-        c.execute(insert(t2), [{"id": 1, "variant": "v1", "canonical": "c1", "volatile": "b"}])
+        c.execute(
+            insert(t2), [{"id": 1, "variant": "v1", "canonical": "c1", "volatile": "b"}]
+        )
 
     # verify using only variant+canonical columns
     from scripts.migrate_sqlite_to_postgres import compute_table_checksum, verify_table
@@ -212,7 +301,6 @@ def test_verify_columns_exclude_column(tmp_path):
     assert res["checksum_match"] is True
 
 
-import pytest
 
 
 @pytest.mark.cli
@@ -221,20 +309,42 @@ def test_cli_verify_columns_per_table(tmp_path):
     src_file = tmp_path / "src_cli_cols.db"
     src_engine = create_engine(f"sqlite:///{src_file}")
     md = MetaData()
-    t = Table("canonical_mappings", md, Column("id", Integer, primary_key=True), Column("variant", String), Column("canonical", String), Column("volatile", String))
+    t = Table(
+        "canonical_mappings",
+        md,
+        Column("id", Integer, primary_key=True),
+        Column("variant", String),
+        Column("canonical", String),
+        Column("volatile", String),
+    )
     md.create_all(bind=src_engine)
     with src_engine.begin() as c:
-        c.execute(insert(t), [{"id": 1, "variant": "v1", "canonical": "c1", "volatile": "a"}])
+        c.execute(
+            insert(t), [{"id": 1, "variant": "v1", "canonical": "c1", "volatile": "a"}]
+        )
 
     tgt_file = tmp_path / "tgt_cli_cols.db"
     tgt_engine = create_engine(f"sqlite:///{tgt_file}")
     md2 = MetaData()
-    t2 = Table("canonical_mappings", md2, Column("id", Integer, primary_key=True), Column("variant", String), Column("canonical", String), Column("volatile", String))
+    t2 = Table(
+        "canonical_mappings",
+        md2,
+        Column("id", Integer, primary_key=True),
+        Column("variant", String),
+        Column("canonical", String),
+        Column("volatile", String),
+    )
     md2.create_all(bind=tgt_engine)
     with tgt_engine.begin() as c:
-        c.execute(insert(t2), [{"id": 1, "variant": "v1", "canonical": "c1", "volatile": "b"}])
+        c.execute(
+            insert(t2), [{"id": 1, "variant": "v1", "canonical": "c1", "volatile": "b"}]
+        )
 
-    script = Path(__file__).resolve().parents[1] / "scripts" / "migrate_sqlite_to_postgres.py"
+    script = (
+        Path(__file__).resolve().parents[1]
+        / "scripts"
+        / "migrate_sqlite_to_postgres.py"
+    )
     # per-table mapping: only include variant and canonical for canonical_mappings
     mapping = "canonical_mappings:variant,canonical"
     cmd = [
@@ -252,6 +362,8 @@ def test_cli_verify_columns_per_table(tmp_path):
         mapping,
     ]
 
-    proc = subprocess.run(cmd, input=b"yes\n", stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.run(
+        cmd, input=b"yes\n", stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
     # Expect success (exit code 0) because verification uses only variant+canonical which match
     assert proc.returncode == 0

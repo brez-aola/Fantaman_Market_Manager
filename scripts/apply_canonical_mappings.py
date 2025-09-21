@@ -4,10 +4,13 @@ CSV format: source_alias, best_match, score, note
 
 By default this script does a dry-run and prints what would be applied. Use --yes to actually insert rows into `canonical_mappings`.
 """
+
 from __future__ import annotations
+
 import argparse
 import csv
 from pathlib import Path
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -37,7 +40,11 @@ def apply_csv(path: Path, yes: bool = False):
         if not src or not tgt:
             continue
         # check existing
-        exists = session.query(CanonicalMapping).filter(CanonicalMapping.variant == src).first()
+        exists = (
+            session.query(CanonicalMapping)
+            .filter(CanonicalMapping.variant == src)
+            .first()
+        )
         if exists:
             print(f"Skipping existing mapping: {src} -> {exists.canonical}")
             continue
@@ -63,9 +70,11 @@ def apply_csv(path: Path, yes: bool = False):
     print(f"Applied {len(to_apply)} mappings.")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     p = argparse.ArgumentParser()
-    p.add_argument("--csv", type=Path, default=DEFAULT_CSV, help="CSV file with suggestions")
+    p.add_argument(
+        "--csv", type=Path, default=DEFAULT_CSV, help="CSV file with suggestions"
+    )
     p.add_argument("--yes", action="store_true", help="Apply changes")
     args = p.parse_args()
     if not args.csv.exists():

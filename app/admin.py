@@ -1,12 +1,20 @@
-from flask import Blueprint, render_template, current_app, request, redirect, url_for, flash, Response
-from werkzeug.utils import secure_filename
-import sqlalchemy as sa
 import os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from .utils.roster_import import parse_roster, apply_roster
-from .utils.team_utils import populate_team_aliases, resolve_team_by_alias
+import sqlalchemy as sa
+from flask import (
+    Blueprint,
+    Response,
+    current_app,
+    flash,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
+from werkzeug.utils import secure_filename
+
+from .utils.roster_import import apply_roster, parse_roster
+from .utils.team_utils import populate_team_aliases
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -43,10 +51,26 @@ def index():
     Session = current_app.extensions["db_session_factory"]
     # simple stats
     with engine.connect() as conn:
-        teams_exists = conn.execute(sa.text("SELECT name FROM sqlite_master WHERE type='table' AND name='teams'\n")).fetchone()
-        teams = conn.execute(sa.text("SELECT COUNT(*) FROM teams")).scalar() if teams_exists else None
-        aliases_exists = conn.execute(sa.text("SELECT name FROM sqlite_master WHERE type='table' AND name='team_aliases'\n")).fetchone()
-        aliases = conn.execute(sa.text("SELECT COUNT(*) FROM team_aliases")).scalar() if aliases_exists else None
+        teams_exists = conn.execute(
+            sa.text(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='teams'\n"
+            )
+        ).fetchone()
+        teams = (
+            conn.execute(sa.text("SELECT COUNT(*) FROM teams")).scalar()
+            if teams_exists
+            else None
+        )
+        aliases_exists = conn.execute(
+            sa.text(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='team_aliases'\n"
+            )
+        ).fetchone()
+        aliases = (
+            conn.execute(sa.text("SELECT COUNT(*) FROM team_aliases")).scalar()
+            if aliases_exists
+            else None
+        )
     return render_template("admin/index.html", teams=teams, aliases=aliases)
 
 
@@ -60,7 +84,9 @@ def upload():
             flash("No file provided", "danger")
             return redirect(url_for("admin.upload"))
         filename = secure_filename(f.filename or "upload.xlsx")
-        upload_dir = os.path.join(os.path.dirname(current_app.config.get("DB_PATH")), "uploads")
+        upload_dir = os.path.join(
+            os.path.dirname(current_app.config.get("DB_PATH")), "uploads"
+        )
         os.makedirs(upload_dir, exist_ok=True)
         path = os.path.join(upload_dir, filename)
         f.save(path)
@@ -93,14 +119,29 @@ def upload():
                 from app.models import ImportAudit
 
                 s2 = Session()
-                ia = ImportAudit(filename=filename, user=request.authorization.username if request.authorization else None, inserted=summary.get("inserted",0), updated=summary.get("updated",0), aliases_created=len(created), success=True, message=None)
+                ia = ImportAudit(
+                    filename=filename,
+                    user=(
+                        request.authorization.username
+                        if request.authorization
+                        else None
+                    ),
+                    inserted=summary.get("inserted", 0),
+                    updated=summary.get("updated", 0),
+                    aliases_created=len(created),
+                    success=True,
+                    message=None,
+                )
                 s2.add(ia)
                 s2.commit()
                 s2.close()
             except Exception:
                 # audit best-effort only
                 pass
-            flash(f"Applied roster: inserted={summary['inserted']} updated={summary['updated']} aliases_created={len(created)}", "success")
+            flash(
+                f"Applied roster: inserted={summary['inserted']} updated={summary['updated']} aliases_created={len(created)}",
+                "success",
+            )
             return redirect(url_for("admin.index"))
 
         # otherwise render preview
@@ -121,10 +162,16 @@ def aliases():
         if alias_id and action:
             with engine.begin() as conn:
                 if action == "delete":
-                    conn.execute(sa.text("DELETE FROM team_aliases WHERE id=:id"), {"id": alias_id})
+                    conn.execute(
+                        sa.text("DELETE FROM team_aliases WHERE id=:id"),
+                        {"id": alias_id},
+                    )
                 elif action == "update":
                     new_text = request.form.get("alias_text", "").strip()
-                    conn.execute(sa.text("UPDATE team_aliases SET alias=:alias WHERE id=:id"), {"alias": new_text, "id": alias_id})
+                    conn.execute(
+                        sa.text("UPDATE team_aliases SET alias=:alias WHERE id=:id"),
+                        {"alias": new_text, "id": alias_id},
+                    )
         return redirect(url_for("admin.aliases"))
 
     # GET: list aliases with simple search and pagination
@@ -134,18 +181,39 @@ def aliases():
     offset = (page - 1) * per_page
     rows = []
     with engine.connect() as conn:
-        exists = conn.execute(sa.text("SELECT name FROM sqlite_master WHERE type='table' AND name='team_aliases'\n")).fetchone()
+        exists = conn.execute(
+            sa.text(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='team_aliases'\n"
+            )
+        ).fetchone()
         if exists:
             if q:
-                rows = conn.execute(sa.text("SELECT id, team_id, alias FROM team_aliases WHERE alias LIKE :q ORDER BY team_id LIMIT :limit OFFSET :offset"), {"q": f"%{q}%", "limit": per_page, "offset": offset}).fetchall()
-                total = conn.execute(sa.text("SELECT COUNT(*) FROM team_aliases WHERE alias LIKE :q"), {"q": f"%{q}%"}).scalar()
+                rows = conn.execute(
+                    sa.text(
+                        "SELECT id, team_id, alias FROM team_aliases WHERE alias LIKE :q ORDER BY team_id LIMIT :limit OFFSET :offset"
+                    ),
+                    {"q": f"%{q}%", "limit": per_page, "offset": offset},
+                ).fetchall()
+                total = conn.execute(
+                    sa.text("SELECT COUNT(*) FROM team_aliases WHERE alias LIKE :q"),
+                    {"q": f"%{q}%"},
+                ).scalar()
             else:
-                rows = conn.execute(sa.text("SELECT id, team_id, alias FROM team_aliases ORDER BY team_id LIMIT :limit OFFSET :offset"), {"limit": per_page, "offset": offset}).fetchall()
-                total = conn.execute(sa.text("SELECT COUNT(*) FROM team_aliases")).scalar()
+                rows = conn.execute(
+                    sa.text(
+                        "SELECT id, team_id, alias FROM team_aliases ORDER BY team_id LIMIT :limit OFFSET :offset"
+                    ),
+                    {"limit": per_page, "offset": offset},
+                ).fetchall()
+                total = conn.execute(
+                    sa.text("SELECT COUNT(*) FROM team_aliases")
+                ).scalar()
         else:
             total = 0
     pages = max(1, (total + per_page - 1) // per_page)
-    return render_template("admin/aliases.html", aliases=rows, page=page, pages=pages, q=q)
+    return render_template(
+        "admin/aliases.html", aliases=rows, page=page, pages=pages, q=q
+    )
 
 
 @bp.route("/canonical", methods=["GET", "POST"])
@@ -154,17 +222,24 @@ def canonical():
     engine = current_app.extensions["db_engine"]
     Session = current_app.extensions["db_session_factory"]
     if request.method == "POST":
-        if request.form.get('action') == 'delete':
-            vid = request.form.get('id')
+        if request.form.get("action") == "delete":
+            vid = request.form.get("id")
             if vid:
                 with engine.begin() as conn:
-                    conn.execute(sa.text("DELETE FROM canonical_mappings WHERE id=:id"), {"id": vid})
+                    conn.execute(
+                        sa.text("DELETE FROM canonical_mappings WHERE id=:id"),
+                        {"id": vid},
+                    )
             return redirect(url_for("admin.canonical"))
         # export
-        if request.form.get('action') == 'export':
+        if request.form.get("action") == "export":
             # stream CSV
             with engine.connect() as conn:
-                rows = conn.execute(sa.text("SELECT variant, canonical FROM canonical_mappings ORDER BY variant")).fetchall()
+                rows = conn.execute(
+                    sa.text(
+                        "SELECT variant, canonical FROM canonical_mappings ORDER BY variant"
+                    )
+                ).fetchall()
                 csv_lines = ["variant,canonical"]
                 for r in rows:
                     csv_lines.append(f'"{r[0]}","{r[1]}"')
@@ -173,15 +248,28 @@ def canonical():
         canonical = request.form.get("canonical", "").strip()
         if variant and canonical:
             with engine.begin() as conn:
-                conn.execute(sa.text("INSERT OR REPLACE INTO canonical_mappings(variant, canonical) VALUES (:v,:c)"), {"v": variant, "c": canonical})
+                conn.execute(
+                    sa.text(
+                        "INSERT OR REPLACE INTO canonical_mappings(variant, canonical) VALUES (:v,:c)"
+                    ),
+                    {"v": variant, "c": canonical},
+                )
         return redirect(url_for("admin.canonical"))
 
     # list mappings
     with engine.connect() as conn:
-        exists = conn.execute(sa.text("SELECT name FROM sqlite_master WHERE type='table' AND name='canonical_mappings'\n")).fetchone()
+        exists = conn.execute(
+            sa.text(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='canonical_mappings'\n"
+            )
+        ).fetchone()
         rows = []
         if exists:
-            rows = conn.execute(sa.text("SELECT id, variant, canonical FROM canonical_mappings ORDER BY variant")).fetchall()
+            rows = conn.execute(
+                sa.text(
+                    "SELECT id, variant, canonical FROM canonical_mappings ORDER BY variant"
+                )
+            ).fetchall()
     return render_template("admin/canonical.html", mappings=rows)
 
 
@@ -191,9 +279,15 @@ def suggestions():
     """Show suggested canonical mappings (from CSV) and allow approving them into DB."""
     engine = current_app.extensions["db_engine"]
     Session = current_app.extensions["db_session_factory"]
-    csv_path = os.path.join(os.path.dirname(current_app.config.get("DB_PATH")), "..", "suggested_canonical_mappings_highconf.csv")
+    csv_path = os.path.join(
+        os.path.dirname(current_app.config.get("DB_PATH")),
+        "..",
+        "suggested_canonical_mappings_highconf.csv",
+    )
     # normalize path: allow file in repo root
-    repo_root = os.path.abspath(os.path.join(os.path.dirname(current_app.config.get("DB_PATH")), ".."))
+    repo_root = os.path.abspath(
+        os.path.join(os.path.dirname(current_app.config.get("DB_PATH")), "..")
+    )
     csv_path = os.path.join(repo_root, "suggested_canonical_mappings_highconf.csv")
 
     if request.method == "POST":
@@ -205,10 +299,11 @@ def suggestions():
             csv_map = {}
             try:
                 import csv as _csv
-                with open(csv_path, newline='', encoding='utf-8') as fh:
+
+                with open(csv_path, newline="", encoding="utf-8") as fh:
                     reader = _csv.DictReader(fh)
                     for r in reader:
-                        csv_map[r.get('source_alias','').strip()] = r
+                        csv_map[r.get("source_alias", "").strip()] = r
             except Exception:
                 csv_map = {}
 
@@ -218,40 +313,60 @@ def suggestions():
                     entry = csv_map.get(s)
                     if not entry:
                         continue
-                    variant = entry.get('source_alias','').strip()
-                    canonical = entry.get('best_match','').strip()
+                    variant = entry.get("source_alias", "").strip()
+                    canonical = entry.get("best_match", "").strip()
                     # check exists
-                    exists = conn.execute(sa.text("SELECT id FROM canonical_mappings WHERE variant=:v"), {"v": variant}).fetchone()
+                    exists = conn.execute(
+                        sa.text("SELECT id FROM canonical_mappings WHERE variant=:v"),
+                        {"v": variant},
+                    ).fetchone()
                     if exists:
                         continue
-                    conn.execute(sa.text("INSERT INTO canonical_mappings(variant, canonical) VALUES (:v,:c)"), {"v": variant, "c": canonical})
+                    conn.execute(
+                        sa.text(
+                            "INSERT INTO canonical_mappings(variant, canonical) VALUES (:v,:c)"
+                        ),
+                        {"v": variant, "c": canonical},
+                    )
             return redirect(url_for("admin.suggestions"))
         # single approve
-        if action == 'approve_one':
-            one = request.form.get('one')
+        if action == "approve_one":
+            one = request.form.get("one")
             if one:
                 try:
                     import csv as _csv
-                    with open(csv_path, newline='', encoding='utf-8') as fh:
+
+                    with open(csv_path, newline="", encoding="utf-8") as fh:
                         reader = _csv.DictReader(fh)
                         for r in reader:
-                            if r.get('source_alias','').strip() == one:
-                                variant = r.get('source_alias','').strip()
-                                canonical = r.get('best_match','').strip()
+                            if r.get("source_alias", "").strip() == one:
+                                variant = r.get("source_alias", "").strip()
+                                canonical = r.get("best_match", "").strip()
                                 with engine.begin() as conn:
-                                    exists = conn.execute(sa.text("SELECT id FROM canonical_mappings WHERE variant=:v"), {"v": variant}).fetchone()
+                                    exists = conn.execute(
+                                        sa.text(
+                                            "SELECT id FROM canonical_mappings WHERE variant=:v"
+                                        ),
+                                        {"v": variant},
+                                    ).fetchone()
                                     if not exists:
-                                        conn.execute(sa.text("INSERT INTO canonical_mappings(variant, canonical) VALUES (:v,:c)"), {"v": variant, "c": canonical})
+                                        conn.execute(
+                                            sa.text(
+                                                "INSERT INTO canonical_mappings(variant, canonical) VALUES (:v,:c)"
+                                            ),
+                                            {"v": variant, "c": canonical},
+                                        )
                                 break
                 except Exception:
                     pass
-            return redirect(url_for('admin.suggestions'))
+            return redirect(url_for("admin.suggestions"))
 
     suggestions = []
     # load CSV
     try:
         import csv
-        with open(csv_path, newline='', encoding='utf-8') as fh:
+
+        with open(csv_path, newline="", encoding="utf-8") as fh:
             reader = csv.DictReader(fh)
             for r in reader:
                 suggestions.append(r)
@@ -269,11 +384,20 @@ def audit():
     per_page = 20
     offset = (page - 1) * per_page
     with engine.connect() as conn:
-        exists = conn.execute(sa.text("SELECT name FROM sqlite_master WHERE type='table' AND name='import_audit'\n")).fetchone()
+        exists = conn.execute(
+            sa.text(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='import_audit'\n"
+            )
+        ).fetchone()
         rows = []
         total = 0
         if exists:
-            rows = conn.execute(sa.text("SELECT id, filename, user, inserted, updated, aliases_created, success, message FROM import_audit ORDER BY id DESC LIMIT :l OFFSET :o"), {"l": per_page, "o": offset}).fetchall()
+            rows = conn.execute(
+                sa.text(
+                    "SELECT id, filename, user, inserted, updated, aliases_created, success, message FROM import_audit ORDER BY id DESC LIMIT :l OFFSET :o"
+                ),
+                {"l": per_page, "o": offset},
+            ).fetchall()
             total = conn.execute(sa.text("SELECT COUNT(*) FROM import_audit")).scalar()
     pages = max(1, (total + per_page - 1) // per_page)
     return render_template("admin/audit.html", audits=rows, page=page, pages=pages)
