@@ -46,7 +46,7 @@ jobs:
       - name: Run bandit (project)
         run: |
           source .venv/bin/activate
-          bandit -r app scripts tests -lll || true
+          bandit -r app scripts tests -lll
 
       - name: Run tests
         run: |
