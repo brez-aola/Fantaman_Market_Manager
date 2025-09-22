@@ -2,28 +2,39 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, ci/add-pip-cache ]
+    branches: ['**']
   pull_request:
-    branches: [ main, master ]
+    branches: ['**']
 
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-cache-${{ matrix.python-version }}-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            pip-cache-${{ matrix.python-version }}-
 
       - name: Install dependencies
         run: |
           python -m venv .venv
           source .venv/bin/activate
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           pip install flake8 bandit pytest
 
