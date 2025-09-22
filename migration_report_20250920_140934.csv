@@ -1,0 +1,7 @@
+table,source_rows,inserted,skipped
+leagues,1,0,0
+teams,8,0,0
+players,0,0,0
+team_aliases,9,0,0
+canonical_mappings,1,0,0
+import_audit,0,0,0

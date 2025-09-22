@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+
 from app.db import get_connection
 
 DB = Path("/mnt/c/work/fantacalcio/giocatori.db")

@@ -1,5 +1,6 @@
 import os
 import shutil
+import logging
 
 import pytest
 
@@ -26,7 +27,7 @@ def tmp_db_path(tmp_path):
             'CREATE TABLE IF NOT EXISTS giocatori (rowid INTEGER PRIMARY KEY, "Nome" TEXT, squadra TEXT, "Costo" REAL, anni_contratto INTEGER, opzione TEXT)'
         )
         cur.execute(
-            'CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL DEFAULT 0, cassa_iniziale REAL DEFAULT 0, cassa_attuale REAL)'
+            "CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL DEFAULT 0, cassa_iniziale REAL DEFAULT 0, cassa_attuale REAL)"
         )
         conn.commit()
         conn.close()
@@ -44,9 +45,9 @@ def app(tmp_db_path):
     # ensure tables created via SQLAlchemy models if code expects them
     try:
         app.init_db()
-    except Exception:
-        # models may not be applied; ignore for now
-        pass
+    except Exception as e:
+        # models may not be applied; log debug for visibility during CI runs
+        logging.debug("app.init_db() failed during test setup: %s", e)
     yield app
 
 

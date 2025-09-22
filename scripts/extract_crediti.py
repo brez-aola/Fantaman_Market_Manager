@@ -1,7 +1,8 @@
-from pathlib import Path
-from openpyxl import load_workbook
-import re
 import json
+import re
+from pathlib import Path
+
+from openpyxl import load_workbook
 
 XLSX = Path("Rose_fantalega-darko-pancev.xlsx")
 if not XLSX.exists():
@@ -33,7 +34,10 @@ for col, name in team_starts:
         v = None
         try:
             v = r[col]
-        except Exception:
+        except (IndexError, TypeError) as e:
+            # missing column in this row or unexpected row shape; skip
+            # keep silent at normal operation but log when debugging
+            # (avoid importing logging at module-level for small script)
             v = None
         if isinstance(v, str):
             m = crediti_re.search(v)

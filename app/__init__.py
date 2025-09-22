@@ -1,7 +1,9 @@
-from flask import Flask
 import os
+
+from flask import Flask
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import logging
 
 
 def create_app(test_config=None):
@@ -32,6 +34,8 @@ def create_app(test_config=None):
         ],
         SECRET_KEY="dev",
         SQLALCHEMY_DATABASE_URI=None,
+        ADMIN_USER="admin",
+        ADMIN_PASS="admin",
     )
 
     if test_config:
@@ -55,16 +59,18 @@ def create_app(test_config=None):
 
     # register blueprints
     try:
+        from .admin import bp as admin_bp
         from .api import bp as api_bp
         from .market import bp as market_bp
         from .teams import bp as teams_bp
 
         app.register_blueprint(api_bp, url_prefix="/api")
         app.register_blueprint(market_bp)
+        app.register_blueprint(admin_bp)
         app.register_blueprint(teams_bp)
-    except Exception:
-        # keep failing registration quiet for now; files may be moved later
-        pass
+    except Exception as e:
+        # Log blueprint registration errors so missing modules don't fail silently
+        logging.exception("Failed to register blueprints: %s", e)
 
     # helper to create DB tables based on SQLAlchemy models
     def init_db():
@@ -72,8 +78,9 @@ def create_app(test_config=None):
             from .models import Base
 
             Base.metadata.create_all(bind=engine)
-        except Exception:
-            # fail silently; caller can inspect exceptions
+        except Exception as e:
+            logging.exception("init_db failed: %s", e)
+            # re-raise so callers (tests) can handle or log as needed
             raise
 
     app.init_db = init_db

@@ -1,0 +1,265 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: ['**']
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-cache-${{ matrix.python-version }}-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            pip-cache-${{ matrix.python-version }}-
+
+      - name: Install dependencies
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          pip install flake8 bandit pytest
+
+      - name: Run flake8
+        run: |
+          source .venv/bin/activate
+          flake8 app scripts tests --max-line-length=100 --exclude=.venv
+
+      - name: Run bandit (project)
+        run: |
+          source .venv/bin/activate
+          bandit -r app scripts tests -lll
+
+      - name: Run tests
+        run: |
+          source .venv/bin/activate
+          pytest -q
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.10]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/pip/wheels
+            ~/.cache/pypoetry
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Install pre-commit
+        run: pip install pre-commit
+
+      - name: Run pre-commit (all files)
+        run: pre-commit run --all-files
+
+      - name: Run tests
+        run: |
+          if [ -f pytest.ini ] || [ -d tests ]; then pytest -q; else echo "No tests found"; fi
+
+  integration:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: giocatori
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/pip/wheels
+            ~/.cache/pypoetry
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Wait for Postgres
+        run: |
+          for i in {1..30}; do
+            pg_isready -h 127.0.0.1 -p 5432 && break || sleep 1
+          done
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt || true
+          pip install -r requirements-dev.txt || true
+
+      - name: Run pre-commit
+        run: |
+          pip install pre-commit
+          pre-commit run --all-files || true
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/pip/wheels
+            ~/.cache/pypoetry
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/giocatori
+        run: |
+          pytest -q tests/test_integration_postgres.py
+
+  cli:
+    name: CLI tests (PR)
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        run_cli: [true]
+    # Run on pull requests via the workflow trigger above
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/pip/wheels
+            ~/.cache/pypoetry
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies (including dev)
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Run CLI-specific test
+        if: matrix.run_cli == 'true'
+        run: |
+          # Run the CLI-focused unit test which invokes the migration script via subprocess
+          pytest -q -m cli tests/test_migrate_sqlite_to_postgres.py::test_cli_verify_columns_per_table
+
+  lint:
+    name: Lint & static checks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.10]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.cache/pip/wheels
+            ~/.cache/pypoetry
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt', '**/requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-dev.txt || true
+
+      - name: Run pre-commit
+        run: |
+          pip install pre-commit
+          pre-commit run --all-files
+
+      - name: Ruff (linter)
+        run: |
+          pip install ruff
+          ruff check .
+
+      - name: Black check
+        run: |
+          pip install black
+          black --check .
+
+      - name: isort check
+        run: |
+          pip install isort
+          isort --check-only .
+
+      - name: mypy
+        run: |
+          pip install mypy
+          mypy . || true

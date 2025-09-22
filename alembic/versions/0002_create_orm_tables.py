@@ -5,8 +5,9 @@ Revises: 581f0f59e94d
 Create Date: 2025-09-16
 """
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0002_create_orm_tables"

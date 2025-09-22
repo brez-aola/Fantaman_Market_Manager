@@ -1,9 +1,15 @@
 from typing import List, Optional
-from sqlalchemy.orm import Session
 
+import logging
+
+from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.domain.models import Player as DomainPlayer
+from app.domain.models import Team as DomainTeam
+from app.models import Player as ORMPlayer
+from app.models import Team as ORMTeam
 from app.repositories.repository import PlayerRepository, TeamRepository
-from app.domain.models import Player as DomainPlayer, Team as DomainTeam
-from app.models import Player as ORMPlayer, Team as ORMTeam
 
 
 def _map_player(orm: ORMPlayer) -> DomainPlayer:
@@ -25,8 +31,13 @@ def _map_team(orm: ORMTeam) -> DomainTeam:
     # map players relationship if loaded
     try:
         domain_team.players = [_map_player(p) for p in orm.players]
-    except Exception:
-        # relationship not present or not loaded; leave empty
+    except (AttributeError, SQLAlchemyError) as e:
+        # relationship not present, not loaded, or SQLAlchemy error; leave empty and log debug
+        logging.debug(
+            "ORMTeam.players relationship not available for team id=%s: %s",
+            getattr(orm, "id", None),
+            e,
+        )
         domain_team.players = []
     return domain_team
 

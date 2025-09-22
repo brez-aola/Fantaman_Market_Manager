@@ -1,0 +1,84 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Suggested canonical mappings</title>
+    <link rel="stylesheet" href="/static/admin.css">
+  </head>
+  <body>
+    <h1>Suggested canonical mappings (high confidence)</h1>
+    <p style="color:darkred;font-weight:bold">Nota: queste proposte servono a normalizzare varianti dei nomi delle <em>fantasquadre</em> (le squadre degli utenti). Non associano fantasquadre alle squadre reali di Serie A. Proposte che puntano a nomi di club reali vengono automaticamente escluse.</p>
+    {% if suggestions %}
+      <form method="post" id="suggestions-form">
+        <input type="hidden" name="action" value="">
+        <table>
+          <thead><tr><th></th><th>Source alias</th><th>Best match</th><th>Score</th><th>Note</th></tr></thead>
+          <tbody>
+            {% for s in suggestions %}
+              <tr>
+                <td><input type="checkbox" name="selected" value="{{ s['source_alias'] }}"></td>
+                <td>{{ s['source_alias'] }}</td>
+                <td>{{ s['best_match'] }}</td>
+                <td>{{ s['score'] }}</td>
+                <td>{{ s['note'] }}</td>
+                <td>
+                  <form method="post" style="display:inline">
+                    <input type="hidden" name="one" value="{{ s['source_alias'] }}">
+                    <button type="submit" name="action" value="approve_one">Approve</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <p>
+          <button type="button" id="bulk-approve">Approve selected</button>
+          <button type="submit" name="action" value="refresh">Refresh</button>
+        </p>
+      </form>
+    {% else %}
+      <p>No suggestions available. Ensure `suggested_canonical_mappings_highconf.csv` exists in the repo root.</p>
+    {% endif %}
+    <p><a href="{{ url_for('admin.canonical') }}">Back to canonical mappings</a></p>
+    <script>
+      // Bulk approve: confirm and submit with selected items
+      (function(){
+        const bulkBtn = document.getElementById('bulk-approve');
+        const form = document.getElementById('suggestions-form');
+        if(!bulkBtn || !form) return;
+        bulkBtn.addEventListener('click', function(){
+          const checked = Array.from(form.querySelectorAll('input[type=checkbox][name=selected]:checked'));
+          if(checked.length === 0){
+            alert('Seleziona almeno una proposta da approvare.');
+            return;
+          }
+          const aliases = checked.map(c => c.value).slice(0,5).join(', ');
+          const more = (checked.length>5)? (' e altri ' + (checked.length-5)) : '';
+          const msg = `Approvi ${checked.length} mapping? Esempi: ${aliases}${more} . Procedere?`;
+          if(!confirm(msg)) return;
+          // set hidden action then submit
+          const actionInput = form.querySelector('input[name=action]');
+          if(actionInput) actionInput.value = 'approve';
+          form.submit();
+        });
+      })();
+
+      // Per-row approve forms: attach confirm to their submit buttons
+      (function(){
+        const forms = document.querySelectorAll('form');
+        forms.forEach(f => {
+          const btn = f.querySelector('button[name="action"][value="approve_one"]');
+          if(btn){
+            btn.addEventListener('click', function(e){
+              // find hidden input 'one' value in the form
+              const one = f.querySelector('input[name=one]')?.value || '';
+              if(!confirm(`Approvi la mapping per "${one}"?`)){
+                e.preventDefault();
+              }
+            });
+          }
+        });
+      })();
+    </script>
+  </body>
+</html>

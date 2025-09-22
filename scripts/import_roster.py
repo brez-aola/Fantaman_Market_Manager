@@ -1,7 +1,11 @@
 import sys
 from pathlib import Path
-from app.db import get_connection
+
 from openpyxl import load_workbook
+import logging
+from sqlite3 import DatabaseError
+
+from app.db import get_connection
 
 DB = Path("/mnt/c/work/fantacalcio/giocatori.db")
 XLSX = (
@@ -66,17 +70,23 @@ for r in rows[5:]:
             # normalize cost to float or 0
             try:
                 c = float(str(costo).strip()) if costo not in (None, "") else 0.0
-            except Exception:
+            except Exception as e:
+                logging.debug("Failed to parse costo as-is for %s: %s", costo, e)
                 try:
                     # sometimes cost may be like '1 ' or with comma
                     c = float(str(costo).replace(",", ".").strip())
-                except Exception:
+                except Exception as e2:
+                    logging.debug("Failed to parse costo with comma replacement for %s: %s", costo, e2)
                     c = 0.0
             team_players[tname].append(
                 {
                     "Nome": name,
                     # normalize role code: store single-letter canonical code
-                    "Ruolo": ((role or "").strip()[:1].upper().replace("G", "P")) if role else "",
+                    "Ruolo": (
+                        ((role or "").strip()[:1].upper().replace("G", "P"))
+                        if role
+                        else ""
+                    ),
                     "Sq.": (squadra_reale or "").strip() if squadra_reale else "",
                     "Costo": c,
                 }
@@ -129,13 +139,23 @@ for team, players in team_players.items():
                 # ensure canonical single-letter role (convert 'G'->'P' and keep first char)
                 "R.": (ruolo[:1].upper().replace("G", "P") if ruolo else ""),
             }
+            # validate that update columns exist in the table (avoid SQL injection via identifier)
+            for k in updates.keys():
+                if k not in cols:
+                    raise ValueError(f"Unexpected column name for giocatori update: {k}")
+
             set_clause = ", ".join([f'"{k}" = ?' for k in updates.keys()])
             params = list(updates.values()) + [rowid]
             try:
-                cur.execute(f"UPDATE giocatori SET {set_clause} WHERE rowid=?", params)
+                # Using parameter placeholders for values and validated column names for identifiers
+                # `set_clause` components were validated against `cols` above; parameterized values are used
+                cur.execute("UPDATE giocatori SET " + set_clause + " WHERE rowid=?", params)  # nosec: B608 - identifiers validated, values parameterized
                 updated += 1
+            except DatabaseError as e:
+                logging.exception("Failed to update %s: %s", nome, e)
             except Exception as e:
-                print("Failed to update", nome, e)
+                # unexpected errors: log and continue to avoid aborting bulk import
+                logging.exception("Unexpected error updating %s: %s", nome, e)
         else:
             # Insert new row: attempt to set common columns present, fallback to minimal
             to_insert = {}
@@ -162,8 +182,10 @@ for team, players in team_players.items():
                     list(to_insert.values()),
                 )
                 inserted += 1
+            except DatabaseError as e:
+                logging.exception("Failed to insert %s: %s", nome, e)
             except Exception as e:
-                print("Failed to insert", nome, e)
+                logging.exception("Unexpected error inserting %s: %s", nome, e)
 
 # After changes, recompute team cash: for each team set cassa_attuale = cassa_iniziale - SUM(Costo of assigned players)
 print("\nUpdating team cash balances...")
@@ -207,3 +229,21 @@ conn.commit()
 conn.close()
 
 print("\nSummary: inserted=", inserted, "updated=", updated, "skipped=", notfound)
+
+# Populate team aliases using the new helper (SQLAlchemy)
+try:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.utils.team_utils import populate_team_aliases
+
+    engine = create_engine(f"sqlite:///{DB}")
+    Session = sessionmaker(bind=engine)
+    s = Session()
+    try:
+        created = populate_team_aliases(s, source="fantateam")
+        print("Created aliases:", len(created))
+    finally:
+        s.close()
+except Exception as e:
+    logging.exception("Failed to populate aliases: %s", e)

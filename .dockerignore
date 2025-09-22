@@ -1,0 +1,12 @@
+__pycache__/
+.venv/
+venv/
+*.pyc
+*.pyo
+*.pyd
+build/
+dist/
+*.sqlite
+giocatori.db*
+node_modules/
+.git

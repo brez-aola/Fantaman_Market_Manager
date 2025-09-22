@@ -1,0 +1,52 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 24.1.0
+    hooks:
+      - id: black
+        language_version: python3.10
+
+  - repo: https://github.com/PyCQA/isort
+    rev: 5.12.0
+    hooks:
+      - id: isort
+
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.13.1
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.0.0
+    hooks:
+      - id: flake8
+        # Let the repository .flake8 configuration control max-line-length and ignores.
+        # Avoid hard-overriding settings here so local .flake8 and CI stay consistent.
+        args: []
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v0.991
+    hooks:
+      - id: mypy
+        # Do not pass filenames from pre-commit; run mypy on the package roots
+        # directly to avoid duplicate-module errors (app.py vs package 'app').
+        pass_filenames: false
+        args:
+          - "scripts"
+          - "tests"
+          - "--config-file"
+          - "mypy.ini"
+          - "--ignore-missing-imports"
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=1024"]
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.3
+    hooks:
+      - id: bandit
+        additional_dependencies: ["pbr"]
+        args: ["-r", "app", "scripts"]

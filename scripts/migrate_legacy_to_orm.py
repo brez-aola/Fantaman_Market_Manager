@@ -15,16 +15,19 @@ from __future__ import annotations
 import argparse
 import shutil
 import sqlite3
-from app.db import get_connection
+
+# Ensure repo root is on sys.path so we can import `app.models` when running this script
+import sys
 from pathlib import Path
+from pathlib import Path as _Path
 from typing import Tuple
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+import logging
+from sqlalchemy.exc import SQLAlchemyError
 
-# Ensure repo root is on sys.path so we can import `app.models` when running this script
-import sys
-from pathlib import Path as _Path
+from app.db import get_connection
 
 _repo_root = _Path(__file__).resolve().parents[1]
 if str(_repo_root) not in sys.path:
@@ -32,7 +35,7 @@ if str(_repo_root) not in sys.path:
 
 # Import models from app
 try:
-    from app.models import Base, Team, Player
+    from app.models import Base, Player, Team
 except Exception as e:
     raise RuntimeError("Unable to import ORM models from app.models: " + str(e))
 
@@ -78,10 +81,22 @@ def legacy_counts(conn: sqlite3.Connection) -> Tuple[int, int]:
     teams_count = 0
     players_count = 0
     if teams_table:
-        cur.execute(f"SELECT COUNT(*) FROM {teams_table}")
+        # Validate table identifier to avoid SQL injection via legacy table names
+        import re
+
+        ident_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+        if not ident_re.match(teams_table):
+            raise ValueError("Detected teams table name is not a valid SQL identifier")
+        cur.execute("SELECT COUNT(*) FROM " + teams_table)
         teams_count = cur.fetchone()[0]
     if players_table:
-        cur.execute(f"SELECT COUNT(*) FROM {players_table}")
+        # Validate players table identifier
+        import re
+
+        ident_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+        if not ident_re.match(players_table):
+            raise ValueError("Detected players table name is not a valid SQL identifier")
+        cur.execute("SELECT COUNT(*) FROM " + players_table)
         players_count = cur.fetchone()[0]
     return teams_count, players_count
 
@@ -98,6 +113,12 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
     conn = get_connection(str(TMP_DB))
     teams_count, players_count = legacy_counts(conn)
     print(f"Legacy counts - teams: {teams_count}, players: {players_count}")
+
+        # Identifier validation regex used throughout this function to ensure any
+        # constructed SQL using table/column identifiers is safe.
+        import re
+
+        ident_re = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
     # Prepare ORM DB (we'll write back to TMP_DB using SQLAlchemy)
     engine = create_engine(f"sqlite:///{TMP_DB}")
@@ -135,29 +156,28 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
 
         print(
             f"Detected legacy tables: teams='{teams_table}', players='{players_table}'"
-        )
-
-        # Copy teams
         migrated_teams = 0
         inserted_teams = 0
-        if teams_table:
+            # concatenation is safe: `teams_table` has been validated as an identifier
+            cur.execute("SELECT COUNT(*) FROM " + teams_table)  # nosec: B608 - identifier validated
             cur.execute(f"PRAGMA table_info('{teams_table}')")
             cols = [r[1] for r in cur.fetchall()]
             name_col = None
-            cash_col = None
-            for c in cols:
-                if c.lower() in ("name", "nome", "team_name"):
                     name_col = c
                 if c.lower() in ("cash", "soldi", "credito"):
-                    cash_col = c
+            # concatenation is safe: `players_table` has been validated as an identifier
+            cur.execute("SELECT COUNT(*) FROM " + players_table)  # nosec: B608 - identifier validated
             if not name_col:
-                # try first text column
-                cur.execute(f"SELECT * FROM {teams_table} LIMIT 1")
+                # try first text column - validate teams_table first
+                if not ident_re.match(teams_table):
+                    raise ValueError("Detected teams table name is not a valid SQL identifier")
+                cur.execute("SELECT * FROM " + teams_table + " LIMIT 1")
                 row = cur.fetchone()
                 if row:
                     name_col = cols[1] if len(cols) > 1 else cols[0]
-            q = f"SELECT * FROM {teams_table}"
-            cur.execute(q)
+            if not ident_re.match(teams_table):
+                raise ValueError("Detected teams table name is not a valid SQL identifier")
+            cur.execute("SELECT * FROM " + teams_table)
             for row in cur.fetchall():
                 row_d = dict(zip(cols, row))
                 team_name = row_d.get(name_col) or row_d.get("name") or "Unknown"
@@ -168,7 +188,8 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
                         try:
                             team_cash = int(float(row_d.get(cand)))
                             break
-                        except Exception:
+                        except Exception as e:
+                            logging.debug("Failed parsing team cash candidate %s for row %s: %s", cand, row_d, e)
                             pass
                 if team_cash is None:
                     team_cash = int(row_d.get(cash_col, 0) or 0)
@@ -209,12 +230,15 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
                 if c.lower() in ("sq", "squadra", "squadra_reale", "squadra_reale"):
                     squadra_reale_col = c
             if not name_col:
-                cur.execute(f"SELECT * FROM {players_table} LIMIT 1")
+                if not ident_re.match(players_table):
+                    raise ValueError("Detected players table name is not a valid SQL identifier")
+                cur.execute("SELECT * FROM " + players_table + " LIMIT 1")
                 row = cur.fetchone()
                 if row:
                     name_col = cols[1] if len(cols) > 1 else cols[0]
-            q = f"SELECT * FROM {players_table}"
-            cur.execute(q)
+            if not ident_re.match(players_table):
+                raise ValueError("Detected players table name is not a valid SQL identifier")
+            cur.execute("SELECT * FROM " + players_table)
             legacy_rows = cur.fetchall()
             # Ensure temp DB players table has the new columns required by ORM inserts
             existing_player_cols = set()
@@ -230,9 +254,13 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
             for col, coltype in needed.items():
                 if col not in existing_player_cols:
                     try:
-                        cur.execute(f"ALTER TABLE players ADD COLUMN {col} {coltype}")
-                    except Exception:
+                        # validate column name before issuing ALTER TABLE
+                        if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", col):
+                            raise ValueError(f"Invalid column name for ALTER TABLE: {col}")
+                        cur.execute("ALTER TABLE players ADD COLUMN " + col + " " + coltype)
+                    except Exception as e:
                         # SQLite sometimes disallows certain ALTERs; ignore and let SQLAlchemy handle via metadata
+                        logging.debug("ALTER TABLE add column %s failed (ignoring): %s", col, e)
                         pass
             # refresh connection for SQLAlchemy to see schema changes
             conn.commit()
@@ -259,17 +287,20 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
                                     .strip()
                                 )
                             )
-                    except Exception:
+                    except Exception as e:
+                        logging.debug("Failed to parse costo for %s: %s", player_name, e)
                         p.costo = None
                     try:
                         if anni_col and row_d.get(anni_col) is not None:
                             p.anni_contratto = int(row_d.get(anni_col))
-                    except Exception:
+                    except Exception as e:
+                        logging.debug("Failed to parse anni_contratto for %s: %s", player_name, e)
                         p.anni_contratto = None
                     try:
                         if opzione_col and row_d.get(opzione_col) is not None:
                             p.opzione = str(row_d.get(opzione_col))
-                    except Exception:
+                    except Exception as e:
+                        logging.debug("Failed to parse opzione for %s: %s", player_name, e)
                         p.opzione = None
                     try:
                         if (
@@ -277,22 +308,22 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
                             and row_d.get(squadra_reale_col) is not None
                         ):
                             p.squadra_reale = str(row_d.get(squadra_reale_col))
-                    except Exception:
+                    except Exception as e:
+                        logging.debug("Failed to parse squadra_reale for %s: %s", player_name, e)
                         p.squadra_reale = None
                     # try to link to team by name or id
                     if team_ref is not None:
-                        # if team_ref is numeric, try to find team by id, else by name
+                        # if team_ref is numeric, try to find team by id, else resolve by alias/name
                         try:
                             candidate = session.query(Team).get(int(team_ref))
                             if candidate:
                                 p.team_id = candidate.id
-                        except Exception:
-                            # try by name
-                            candidate = (
-                                session.query(Team)
-                                .filter(Team.name == str(team_ref))
-                                .first()
-                            )
+                        except Exception as e:
+                            logging.debug("Failed to resolve team by numeric id %s: %s", team_ref, e)
+                            # try by alias/name using resolver
+                            from app.utils.team_utils import resolve_team_by_alias
+
+                            candidate = resolve_team_by_alias(session, str(team_ref))
                             if candidate:
                                 p.team_id = candidate.id
                     session.add(p)
@@ -310,7 +341,8 @@ def migrate(dry_run: bool = True, src_db: Path | None = None) -> None:
                     pcount = check_s.query(Player).count()
                 finally:
                     check_s.close()
-            except Exception:
+            except Exception as e:
+                logging.exception("Failed to query ORM counts after migration: %s", e)
                 tcount = inserted_teams
                 pcount = inserted_players
             print(

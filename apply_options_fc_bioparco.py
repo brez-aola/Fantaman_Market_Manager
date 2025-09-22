@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-import shutil
-import os
 import datetime
-import unicodedata
+import os
 import re
+import shutil
+import unicodedata
+
 from app.db import get_connection
 
 DB = os.path.join(os.path.dirname(__file__), "giocatori.db")
@@ -91,7 +92,8 @@ for t in targets:
     # update all matched rowids
     ids = [r["rowid"] for r in matches]
     placeholders = ",".join("?" for _ in ids)
-    sql = f"UPDATE giocatori SET opzione = ?, anni_contratto = ?, squadra = ? WHERE rowid IN ({placeholders})"
+    # placeholders built from integer count only; values (ids) are passed as parameters
+    sql = f"UPDATE giocatori SET opzione = ?, anni_contratto = ?, squadra = ? WHERE rowid IN ({placeholders})"  # nosec: B608 - placeholders are safe and values parameterized
     params = ["SI", None, FANTASY] + ids
     cur.execute(sql, params)
     conn.commit()
@@ -115,7 +117,7 @@ if updated:
     q = (
         'SELECT rowid, "Nome", "Sq.", squadra, opzione, anni_contratto FROM giocatori WHERE rowid IN ('
         + ",".join("?" for _ in updated)
-        + ")"
+        + ")"  # nosec: B608 - placeholders are safe; ids passed as parameters
     )
     ids = [u[1] for u in updated]
     cur.execute(q, ids)

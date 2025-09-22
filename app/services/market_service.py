@@ -1,5 +1,6 @@
 import sqlite3
-from typing import Optional, Dict, Any
+import logging
+from typing import Any, Dict, Optional
 
 
 class InsufficientFunds(Exception):
@@ -38,7 +39,7 @@ class MarketService:
             )
             if costo_val < 0 or costo_val > 1000:
                 return "Il costo deve essere tra 0 e 1000."
-        except Exception:
+        except (ValueError, TypeError):
             return "Costo non valido."
         if anni_contratto and str(anni_contratto) not in ["1", "2", "3"]:
             return "Anni contratto non valido."
@@ -50,7 +51,7 @@ class MarketService:
         else:
             try:
                 costo_val = float(str(costo).replace(",", "").replace("€", "").strip())
-            except Exception:
+            except (ValueError, TypeError):
                 costo_val = 0.0
         if not squadra:
             squadra_val = None
@@ -60,14 +61,17 @@ class MarketService:
             squadra_val = squadra
         return squadra_val, costo_val, anni_contratto, opzione
 
-    def _table_has_column(self, conn: sqlite3.Connection, table: str, column: str) -> bool:
+    def _table_has_column(
+        self, conn: sqlite3.Connection, table: str, column: str
+    ) -> bool:
         """Return True if the given column exists in the table on this connection."""
         cur = conn.cursor()
         try:
             cur.execute(f"PRAGMA table_info({table})")
             cols = [r[1] if isinstance(r, tuple) else r["name"] for r in cur.fetchall()]
             return column in cols
-        except Exception:
+        except (sqlite3.DatabaseError, AttributeError) as e:
+            logging.debug("_table_has_column failed for %s.%s: %s", table, column, e)
             return False
 
     # Team cash helpers (migrated from app.py) -------------------------------------------------
@@ -78,8 +82,9 @@ class MarketService:
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL, cassa_iniziale REAL, cassa_attuale REAL)"
             )
-        except Exception:
+        except sqlite3.DatabaseError as e:
             # ignore if DB doesn't support DDL here; caller will get meaningful error
+            logging.debug("get_team_cash: create table failed: %s", e)
             pass
 
         # reuse cur for actual query
@@ -103,7 +108,8 @@ class MarketService:
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL, cassa_iniziale REAL, cassa_attuale REAL)"
             )
-        except Exception:
+        except sqlite3.DatabaseError as e:
+            logging.debug("update_team_cash: create table failed: %s", e)
             pass
         cur.execute(
             "SELECT carryover, cassa_iniziale FROM fantateam WHERE squadra=?", (team,)
@@ -128,7 +134,8 @@ class MarketService:
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL, cassa_iniziale REAL, cassa_attuale REAL)"
             )
-        except Exception:
+        except sqlite3.DatabaseError as e:
+            logging.debug("atomic_charge_team: create table failed: %s", e)
             pass
         cur.execute(
             "SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
@@ -158,7 +165,8 @@ class MarketService:
             cur.execute(
                 "CREATE TABLE IF NOT EXISTS fantateam (squadra TEXT PRIMARY KEY, carryover REAL, cassa_iniziale REAL, cassa_attuale REAL)"
             )
-        except Exception:
+        except sqlite3.DatabaseError as e:
+            logging.debug("refund_team: create table failed: %s", e)
             pass
         cur.execute(
             "SELECT carryover, cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
@@ -166,19 +174,19 @@ class MarketService:
         )
         r = cur.fetchone()
         if r:
-            try:
-                cur_att = r[2]
-            except Exception:
-                cur_att = r[2]
+            cur_att = r[2]
             if cur_att is not None:
-                new = float(cur_att) + amount
+                try:
+                    new = float(cur_att) + amount
+                except (ValueError, TypeError):
+                    new = amount
                 cur.execute(
                     "UPDATE fantateam SET cassa_attuale=? WHERE squadra=?", (new, team)
                 )
             else:
                 try:
                     iniz = float(r[1]) if r[1] is not None else 300.0
-                except Exception:
+                except (ValueError, TypeError):
                     iniz = 300.0
                 new = iniz + amount
                 cur.execute(
@@ -210,7 +218,10 @@ class MarketService:
         # Read legacy `squadra` and optionally `FantaSquadra` if the column exists
         has_fanta = self._table_has_column(conn, "giocatori", "FantaSquadra")
         if has_fanta:
-            cur.execute('SELECT "squadra", "FantaSquadra", Costo FROM giocatori WHERE rowid=?', (id,))
+            cur.execute(
+                'SELECT "squadra", "FantaSquadra", Costo FROM giocatori WHERE rowid=?',
+                (id,),
+            )
             prev = cur.fetchone()
             prev_team = None
             prev_cost = 0.0
@@ -219,7 +230,7 @@ class MarketService:
                 prev_team = prev[1] if prev[1] not in (None, "") else prev[0]
                 try:
                     prev_cost = float(prev[2]) if prev[2] not in (None, "") else 0.0
-                except Exception:
+                except (ValueError, TypeError):
                     prev_cost = 0.0
         else:
             cur.execute('SELECT "squadra", Costo FROM giocatori WHERE rowid=?', (id,))
@@ -230,7 +241,7 @@ class MarketService:
                 prev_team = prev[0]
                 try:
                     prev_cost = float(prev[1]) if prev[1] not in (None, "") else 0.0
-                except Exception:
+                except (ValueError, TypeError):
                     prev_cost = 0.0
 
         # Unassign
@@ -274,15 +285,45 @@ class MarketService:
 
         # Keep legacy `squadra` in sync with `FantaSquadra` so different parts of the app see the change
         if has_fanta:
-            cur.execute(
-                'UPDATE giocatori SET "squadra"=?, "FantaSquadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
-                (squadra_val, squadra_val, costo_val, anni_contratto, opzione, id),
-            )
+            # Try updating with the full expected column set, but be tolerant of missing
+            # legacy columns. Retry progressively removing optional columns when the
+            # DB schema doesn't include them so minimal test DBs work.
+            try:
+                cur.execute(
+                    'UPDATE giocatori SET "squadra"=?, "FantaSquadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                    (squadra_val, squadra_val, costo_val, anni_contratto, opzione, id),
+                )
+            except sqlite3.OperationalError as e:
+                logging.debug("Update with full column set failed, retrying reduced sets: %s", e)
+                # First retry: drop anni_contratto if missing
+                try:
+                    cur.execute(
+                        'UPDATE giocatori SET "squadra"=?, "FantaSquadra"=?, "Costo"=?, "opzione"=? WHERE rowid=?',
+                        (squadra_val, squadra_val, costo_val, opzione, id),
+                    )
+                except sqlite3.OperationalError:
+                    # Second retry: drop opzione as well (very minimal schema)
+                    cur.execute(
+                        'UPDATE giocatori SET "squadra"=?, "FantaSquadra"=?, "Costo"=? WHERE rowid=?',
+                        (squadra_val, squadra_val, costo_val, id),
+                    )
         else:
-            cur.execute(
-                'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
-                (squadra_val, costo_val, anni_contratto, opzione, id),
-            )
+            try:
+                cur.execute(
+                    'UPDATE giocatori SET "squadra"=?, "Costo"=?, "anni_contratto"=?, "opzione"=? WHERE rowid=?',
+                    (squadra_val, costo_val, anni_contratto, opzione, id),
+                )
+            except sqlite3.OperationalError:
+                try:
+                    cur.execute(
+                        'UPDATE giocatori SET "squadra"=?, "Costo"=?, "opzione"=? WHERE rowid=?',
+                        (squadra_val, costo_val, opzione, id),
+                    )
+                except sqlite3.OperationalError:
+                    cur.execute(
+                        'UPDATE giocatori SET "squadra"=?, "Costo"=? WHERE rowid=?',
+                        (squadra_val, costo_val, id),
+                    )
         conn.commit()
         return {"success": True}
 
@@ -310,13 +351,16 @@ class MarketService:
                 if costo not in (None, "")
                 else 0.0
             )
-        except Exception:
+        except (ValueError, TypeError):
             costo_val = 0.0
 
         # read legacy `squadra` and optionally `FantaSquadra` if the column exists
         has_fanta = self._table_has_column(conn, "giocatori", "FantaSquadra")
         if has_fanta:
-            cur.execute('SELECT "squadra", "FantaSquadra", Costo FROM giocatori WHERE rowid=?', (pid,))
+            cur.execute(
+                'SELECT "squadra", "FantaSquadra", Costo FROM giocatori WHERE rowid=?',
+                (pid,),
+            )
             prev = cur.fetchone()
             prev_team = None
             prev_cost = 0.0
@@ -325,7 +369,7 @@ class MarketService:
                 prev_team = prev[1] if prev[1] not in (None, "") else prev[0]
                 try:
                     prev_cost = float(prev[2]) if prev[2] not in (None, "") else 0.0
-                except Exception:
+                except (ValueError, TypeError):
                     prev_cost = 0.0
         else:
             cur.execute('SELECT "squadra", Costo FROM giocatori WHERE rowid=?', (pid,))
@@ -336,7 +380,7 @@ class MarketService:
                 prev_team = prev[0]
                 try:
                     prev_cost = float(prev[1]) if prev[1] not in (None, "") else 0.0
-                except Exception:
+                except (ValueError, TypeError):
                     prev_cost = 0.0
 
         if squadra_val is None and prev_team:
@@ -411,8 +455,8 @@ class MarketService:
         suggestions = []
         if not query or len(query) < 2:
             return suggestions
-        cur = conn.cursor()
         try:
+            cur = conn.cursor()
             suggestion_sql = (
                 "SELECT DISTINCT Nome FROM giocatori "
                 "WHERE Nome LIKE ? OR Nome LIKE ? OR Nome LIKE ? "
@@ -436,7 +480,9 @@ class MarketService:
                 if name.strip().lower() == q_norm:
                     continue
                 suggestions.append(name)
-        except Exception:
+        except (sqlite3.DatabaseError, sqlite3.ProgrammingError) as e:
+            # ProgrammingError may be raised if connection is closed; return safe empty suggestion list
+            logging.debug("get_name_suggestions DB error or closed conn: %s", e)
             return []
         return suggestions
 

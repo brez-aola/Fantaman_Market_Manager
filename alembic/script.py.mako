@@ -1,3 +1,4 @@
+"""Alekzbic script template placeholder"""
 """Migration script template used by alembic when generating revisions.
 This is a minimal template sufficient for autogenerate to write migration files.
 """
