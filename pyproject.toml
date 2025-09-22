@@ -14,10 +14,11 @@ extend-ignore = ["E203", "W503"]
 exclude = [".venv", "__pycache__", "build", "dist", "venv", "giocatori.db*", "*.pyc", "*.sqlite"]
 
 [tool.mypy]
-python_version = 3.10
+python_version = "3.10"
 files = ["app", "scripts", "tests"]
 ignore_missing_imports = true
 strict = false
+# exclude app.py (top-level script) to avoid duplicate-module collisions with package `app`
 exclude = "(^|/)app\\.py$"
 
 [tool.poetry]
