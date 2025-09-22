@@ -1,5 +1,6 @@
 import os
 import shutil
+import logging
 
 import pytest
 
@@ -44,9 +45,9 @@ def app(tmp_db_path):
     # ensure tables created via SQLAlchemy models if code expects them
     try:
         app.init_db()
-    except Exception:
-        # models may not be applied; ignore for now
-        pass
+    except Exception as e:
+        # models may not be applied; log debug for visibility during CI runs
+        logging.debug("app.init_db() failed during test setup: %s", e)
     yield app
 
 

@@ -1,4 +1,5 @@
 import os
+import logging
 
 import sqlalchemy as sa
 from flask import (
@@ -48,7 +49,7 @@ def requires_auth(f):
 @requires_auth
 def index():
     engine = current_app.extensions["db_engine"]
-    Session = current_app.extensions["db_session_factory"]
+    # session factory available via extensions if needed
     # simple stats
     with engine.connect() as conn:
         teams_exists = conn.execute(
@@ -96,7 +97,6 @@ def upload():
         try:
             parsed = parse_roster(path)
             team_players = parsed["teams"]
-            issues = parsed.get("issues", [])
         except Exception as e:
             flash(f"Failed to parse file: {e}", "danger")
             return redirect(url_for("admin.upload"))
@@ -107,7 +107,6 @@ def upload():
             # apply and audit
             summary = apply_roster(db_path, team_players)
             # run alias population
-            engine = current_app.extensions["db_engine"]
             Session = current_app.extensions["db_session_factory"]
             s = Session()
             try:
@@ -133,11 +132,13 @@ def upload():
                     message=None,
                 )
                 s2.add(ia)
-                s2.commit()
-                s2.close()
-            except Exception:
-                # audit best-effort only
-                pass
+                try:
+                    s2.commit()
+                finally:
+                    s2.close()
+            except Exception as e:
+                # audit best-effort only: log the exception and continue
+                logging.exception("Failed to record import audit: %s", e)
             flash(
                 f"Applied roster: inserted={summary['inserted']} updated={summary['updated']} aliases_created={len(created)}",
                 "success",
@@ -154,7 +155,7 @@ def upload():
 @requires_auth
 def aliases():
     engine = current_app.extensions["db_engine"]
-    Session = current_app.extensions["db_session_factory"]
+    # session factory available via extensions if needed
     if request.method == "POST":
         # handle edits: alias_id, alias_text, action=update/delete
         alias_id = request.form.get("alias_id")
@@ -220,7 +221,7 @@ def aliases():
 @requires_auth
 def canonical():
     engine = current_app.extensions["db_engine"]
-    Session = current_app.extensions["db_session_factory"]
+    # session factory available via extensions if needed
     if request.method == "POST":
         if request.form.get("action") == "delete":
             vid = request.form.get("id")
@@ -278,7 +279,7 @@ def canonical():
 def suggestions():
     """Show suggested canonical mappings (from CSV) and allow approving them into DB."""
     engine = current_app.extensions["db_engine"]
-    Session = current_app.extensions["db_session_factory"]
+    # session factory available via extensions if needed
     csv_path = os.path.join(
         os.path.dirname(current_app.config.get("DB_PATH")),
         "..",
@@ -304,7 +305,8 @@ def suggestions():
                     reader = _csv.DictReader(fh)
                     for r in reader:
                         csv_map[r.get("source_alias", "").strip()] = r
-            except Exception:
+            except Exception as e:
+                logging.exception("Failed to load suggestions CSV for bulk approve: %s", e)
                 csv_map = {}
 
             # insert into canonical_mappings avoiding duplicates
@@ -357,8 +359,9 @@ def suggestions():
                                             {"v": variant, "c": canonical},
                                         )
                                 break
-                except Exception:
-                    pass
+                except Exception as e:
+                    # best-effort single-approve insertion; log and continue
+                    logging.exception("Failed to insert single canonical mapping: %s", e)
             return redirect(url_for("admin.suggestions"))
 
     suggestions = []
@@ -370,7 +373,8 @@ def suggestions():
             reader = csv.DictReader(fh)
             for r in reader:
                 suggestions.append(r)
-    except Exception:
+    except Exception as e:
+        logging.exception("Failed to load suggestions CSV: %s", e)
         suggestions = []
 
     return render_template("admin/suggestions.html", suggestions=suggestions)

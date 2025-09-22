@@ -66,8 +66,10 @@ def test_update_player_json_and_assign_form(client):
         print("DEBUG: assegna_giocatore returned", r.status_code)
         try:
             print("DEBUG BODY:", r.data.decode(errors="ignore")[:2000])
-        except Exception:
-            pass
+        except UnicodeDecodeError as e:
+            print("DEBUG: failed to decode response body:", e)
+        except Exception as e:
+            print("DEBUG: unexpected error while printing body:", e)
     assert r.status_code in (200, 302)
 
     conn.close()

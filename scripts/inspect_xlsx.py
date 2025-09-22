@@ -3,7 +3,7 @@ from pathlib import Path
 
 try:
     from openpyxl import load_workbook
-except Exception:
+except ImportError:
     print("MISSING_OPENPYXL")
     sys.exit(2)
 

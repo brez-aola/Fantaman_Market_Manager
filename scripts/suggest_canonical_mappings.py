@@ -20,7 +20,8 @@ from typing import List, Tuple
 
 try:
     from rapidfuzz import process as rf_process
-except Exception:
+except ImportError:
+    # rapidfuzz optional; fall back to difflib
     rf_process = None
 
 from difflib import get_close_matches
@@ -113,7 +114,7 @@ def extract_team_names_from_roster(path: Path) -> List[str]:
                 for i in idxs:
                     try:
                         v = row[i]
-                    except Exception:
+                    except (IndexError, TypeError):
                         v = None
                     if v and isinstance(v, str) and is_probable_team_name(v):
                         names.add(v.strip())
@@ -146,8 +147,10 @@ def load_existing_teams(session) -> List[str]:
         for cm in session.query(CanonicalMapping).all():
             if cm.canonical not in teams:
                 teams.append(cm.canonical)
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+
+        logging.debug("Could not load CanonicalMapping entries: %s", e)
     return teams
 
 

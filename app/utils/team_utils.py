@@ -9,7 +9,8 @@ from app.models import League, Team, TeamAlias
 
 try:
     from rapidfuzz import process as rf_process
-except Exception:
+except ImportError:
+    # rapidfuzz is optional; fall back to difflib without noisy stacktrace
     rf_process = None
 
 
@@ -86,8 +87,14 @@ def populate_team_aliases(
 
         for cm in session.query(CanonicalMapping).all():
             canonical_map[cm.variant.lower()] = cm.canonical
-    except Exception:
-        # if table missing or other error, fall back to empty map
+    except (ImportError, Exception) as e:
+        # if table missing or other error, fall back to empty map and log
+        import logging
+
+        logging.debug(
+            "Could not load CanonicalMapping table; proceeding without canonical_map: %s",
+            e,
+        )
         canonical_map = {}
     # fetch source rows
     import sqlalchemy as sa
@@ -119,7 +126,10 @@ def populate_team_aliases(
             cash_val = int(
                 float(r[1] if r[1] is not None else (r[2] if r[2] is not None else 0))
             )
-        except Exception:
+        except (TypeError, ValueError) as e:
+            import logging
+
+            logging.debug("Failed to parse cash value for alias %s: %s", alias_name, e)
             cash_val = None
 
         matched_team = None

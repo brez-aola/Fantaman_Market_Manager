@@ -5,8 +5,6 @@ Revises:
 Create Date: 2025-09-20
 """
 
-
-
 # revision identifiers, used by Alembic.
 revision = "0001_initial"
 down_revision = None

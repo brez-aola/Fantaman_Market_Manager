@@ -2,6 +2,7 @@ from flask import Blueprint, current_app, render_template
 
 from app.db import get_connection
 from app.services.market_service import MarketService
+import logging
 
 bp = Blueprint("teams", __name__, url_prefix="/teams")
 
@@ -82,14 +83,15 @@ def team_page(team_name):
                             conn_check.close()
                             session.close()
                             # fallthrough to sqlite fallback below
-                            raise Exception("use sqlite fallback")
+                            raise RuntimeError("use sqlite fallback")
                         conn_check.close()
-                except Exception:
-                    # close session and let fallback code below handle sqlite
+                except Exception as e:
+                    # close session and let fallback code below handle sqlite; log for visibility
                     try:
                         session.close()
-                    except Exception:
-                        pass
+                    except Exception as e2:
+                        logging.debug("Failed to close session during teams fallback: %s", e2)
+                    logging.debug("ORM teams check triggered fallback: %s", e)
                     raise
 
                 session.close()
@@ -105,8 +107,8 @@ def team_page(team_name):
                 )
             finally:
                 session.close()
-    except Exception:
-        pass
+    except Exception as e:
+        logging.debug("ORM team_page failed, falling back to sqlite: %s", e)
 
     # fallback to sqlite
     # fallback to sqlite via MarketService helper
@@ -127,7 +129,8 @@ def team_page(team_name):
             cassa=cassa,
             squadre=[],
         )
-    except Exception:
+    except Exception as e:
+        logging.exception("Service-based team_roster lookup failed: %s", e)
         # preserve existing fallback behavior: empty roster and default cash
         return render_template(
             "team.html",

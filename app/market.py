@@ -1,4 +1,7 @@
 import urllib.parse
+import logging
+import sqlite3
+from sqlalchemy.exc import SQLAlchemyError
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request
 
@@ -227,7 +230,8 @@ def index():
                 ):
                     suggestions.append(name)
             conn.close()
-        except Exception:
+        except (sqlite3.DatabaseError, ValueError, TypeError) as e:
+            logging.exception("Failed to build name suggestions: %s", e)
             suggestions = []
 
     # compute team summaries: prefer ORM if available, otherwise fall back to sqlite3
@@ -266,7 +270,7 @@ def index():
                         # p may not have a numeric cost field in ORM model; ignore cost unless custom attribute exists
                         try:
                             costo_val = float(getattr(p, "costo", 0) or 0)
-                        except Exception:
+                        except (ValueError, TypeError):
                             costo_val = 0.0
                         spent += costo_val
                         rcode = (p.role or "")[:1].upper() if p.role else ""
@@ -274,10 +278,7 @@ def index():
                         if rcode == "G":
                             rcode = "P"
                         counts[rcode] = counts.get(rcode, 0) + 1
-                        # goalkeeper counts: 'G' treated as 'P' if present in DB
-                        portieri_count = int(counts.get("P", 0)) + int(
-                            counts.get("G", 0)
-                        )
+                    portieri_count = int(counts.get("P", 0)) + int(counts.get("G", 0))
                     dif_count = int(counts.get("D", 0))
                     cen_count = int(counts.get("C", 0))
                     att_count = int(counts.get("A", 0))
@@ -309,7 +310,8 @@ def index():
                     )
             finally:
                 session.close()
-    except Exception:
+    except (AttributeError, ImportError, SQLAlchemyError) as e:
+        logging.exception("ORM team summaries failed: %s", e)
         team_casse = []
 
     if not team_casse:
@@ -318,7 +320,8 @@ def index():
             svc = MarketService()
             team_casse = svc.get_team_summaries(conn, SQUADRE, ROSE_STRUCTURE)
             conn.close()
-        except Exception:
+        except (sqlite3.DatabaseError, ValueError, TypeError) as e:
+            logging.exception("Service get_team_summaries failed: %s", e)
             team_casse = []
     team_casse.sort(key=lambda x: x["remaining"], reverse=True)
     team_casse_missing = sorted(team_casse, key=lambda x: x["missing"])
@@ -382,7 +385,7 @@ def assegna_giocatore():
                     if costo not in (None, "")
                     else 0.0
                 )
-            except Exception:
+            except (ValueError, TypeError):
                 needed = 0.0
             return (
                 f"Fondi insufficienti per assegnare (costo: {needed} > disponibile: {avail}).",
@@ -416,7 +419,7 @@ def update_player():
         )
         if costo_val < 0 or costo_val > 1000:
             error_msg = "Il costo deve essere tra 0 e 1000."
-    except Exception:
+    except (ValueError, TypeError):
         error_msg = "Costo non valido."
     if anni_contratto and str(anni_contratto) not in ["1", "2", "3"]:
         error_msg = "Anni contratto non valido."
@@ -481,7 +484,8 @@ def rose():
                     )
             finally:
                 session.close()
-    except Exception:
+    except (AttributeError, ImportError, SQLAlchemyError) as e:
+        logging.exception("Failed to load ORM rows for rose view: %s", e)
         orm_rows = []
 
     if orm_rows:
@@ -552,7 +556,8 @@ def rose():
         return render_template(
             "rose.html", squadre=all_teams, rose_structure=ROSE_STRUCTURE, rose=rose_map
         )
-    except Exception:
+    except (sqlite3.DatabaseError, ValueError, TypeError) as e:
+        logging.exception("Service-based rose fallback failed: %s", e)
         # final fallback: empty rose
         return render_template(
             "rose.html",
@@ -645,8 +650,8 @@ def squadra(team_name):
                     finally:
                         try:
                             conn_check.close()
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            logging.debug("Failed to close conn_check: %s", e)
 
                 return render_template(
                     "team.html",
@@ -660,9 +665,8 @@ def squadra(team_name):
                 )
             finally:
                 session.close()
-    except Exception:
-        # fall back to sqlite
-        pass
+    except Exception as e:
+        logging.exception("ORM squadra query failed; falling back to sqlite: %s", e)
 
     # Use the MarketService sqlite fallback (it handles missing FantaSquadra column)
     try:
@@ -684,12 +688,13 @@ def squadra(team_name):
                 cassa=cassa,
                 squadre=current_app.config.get("SQUADRE"),
             )
-    except Exception:
+    except Exception as e:
+        logging.exception("Service-based team_roster lookup failed: %s", e)
         # fall back to default empty roster rendering
         try:
             conn.close()
-        except Exception:
-            pass
+        except Exception as e:
+            logging.debug("Failed to close conn after service error: %s", e)
     # final fallback: render with computed variables (should rarely reach here)
     return render_template(
         "team.html",

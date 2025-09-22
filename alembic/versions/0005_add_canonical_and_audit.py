@@ -26,7 +26,6 @@ def table_exists(tablename):
 
 
 def upgrade():
-    bind = op.get_bind()
     # canonical_mappings
     if not table_exists("canonical_mappings"):
         op.create_table(

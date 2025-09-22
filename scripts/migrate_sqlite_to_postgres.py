@@ -23,18 +23,19 @@ from __future__ import annotations
 import argparse
 import csv
 import datetime
+import hashlib
 import logging
 import os
 import re
 import shutil
 import subprocess
 import sys
-import hashlib
 from typing import List, Optional
 
 from sqlalchemy import MetaData, Table, create_engine, insert, select, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import SQLAlchemyError
 
 
 def parse_args():
@@ -146,12 +147,13 @@ def backup_target_db(database_url: str) -> Optional[str]:
         cmd = ["pg_dump", libpq_url]
         with open(dumpfile, "wb") as out:
             # pass list args and explicit shell=False to avoid shell injection
-            proc = subprocess.run(cmd, stdout=out, stderr=subprocess.PIPE, shell=False)
-        if proc.returncode != 0:
-            logging.error(f"pg_dump failed: {proc.stderr.decode()}")
-            return None
-        logging.info(f"pg_dump wrote: {dumpfile}")
-        return dumpfile
+            # cmd is a list derived from a libpq URL and a fixed program name; using shell=False
+            proc = subprocess.run(cmd, stdout=out, stderr=subprocess.PIPE)  # nosec: B603 - subprocess invoked with list args
+            if proc.returncode != 0:
+                logging.error(f"pg_dump failed: {proc.stderr.decode()}")
+                return None
+            logging.info(f"pg_dump wrote: {dumpfile}")
+            return dumpfile
     except Exception as e:
         logging.error(f"Failed to run pg_dump: {e}")
         return None
@@ -202,7 +204,8 @@ def compute_table_checksum(
         # use yield_per to fetch in chunks (SQLAlchemy provides this on Result)
         try:
             iterator = result.yield_per(chunk)
-        except Exception:
+        except Exception as e:
+            logging.exception("yield_per not supported, falling back to iterator: %s", e)
             # fallback to plain iterator
             iterator = iter(result)
 
@@ -212,7 +215,8 @@ def compute_table_checksum(
             else:
                 try:
                     mapping = dict(row)
-                except Exception:
+                except Exception as e:
+                    logging.debug("Row to dict failed, falling back to positional mapping: %s", e)
                     mapping = {c.name: row[i] for i, c in enumerate(tbl.columns)}
 
             # per-row hash: MD5 over the concatenated column values (stable order)
@@ -301,15 +305,27 @@ def compute_table_checksum_postgres(
 
     # Note: we use md5 on the DB side for compatibility with Postgres md5();
     # this is DB-side-only and acceptable for integrity checks (not security).
+    # All identifiers (table and columns) have been validated above; build final SQL safely
     sql = text(
-        f"SELECT md5(string_agg(row_md5, '' ORDER BY pk_sort)) as checksum FROM ("
-        f"SELECT md5(concat_ws('|', {concat_cols})) AS row_md5, concat_ws('|', {', '.join(pk_names or col_names)}) AS pk_sort FROM {table_name}"
-        f") s"
+        (
+            "SELECT md5(string_agg(row_md5, '' ORDER BY pk_sort)) as checksum FROM ("
+            "SELECT md5(concat_ws('|', "
+            + concat_cols
+            + ")) AS row_md5, concat_ws('|', "
+            + (", ".join(pk_names or col_names))
+            + ") AS pk_sort FROM "
+            + table_name
+            + ") s"
+        )
     )
 
     with engine.connect() as conn:
-        res = conn.execute(sql).scalar()
-        return res or ""
+        try:
+            res = conn.execute(sql).scalar()
+            return res or ""
+        except SQLAlchemyError as e:
+            logging.exception("Postgres checksum query failed for %s: %s", table_name, e)
+            return ""
 
 
 def verify_table(
@@ -332,7 +348,8 @@ def verify_table(
             src_count = (
                 s.execute(select(text("count(*)")).select_from(src_tbl)).scalar() or 0
             )
-        except Exception:
+        except Exception as e:
+            logging.exception("Failed to get source count for %s: %s", table_name, e)
             src_count = 0
 
     with tgt_engine.connect() as t:
@@ -340,7 +357,8 @@ def verify_table(
             tgt_count = (
                 t.execute(select(text("count(*)")).select_from(tgt_tbl)).scalar() or 0
             )
-        except Exception:
+        except Exception as e:
+            logging.exception("Failed to get target count for %s: %s", table_name, e)
             tgt_count = 0
 
     count_match = int(src_count) == int(tgt_count)
@@ -348,11 +366,13 @@ def verify_table(
     # compute checksums (may be slow) — default python implementation
     try:
         src_checksum = compute_table_checksum(src_engine, table_name, columns=columns)
-    except Exception:
+    except Exception as e:
+        logging.exception("Failed to compute source checksum for %s: %s", table_name, e)
         src_checksum = ""
     try:
         tgt_checksum = compute_table_checksum(tgt_engine, table_name, columns=columns)
-    except Exception:
+    except Exception as e:
+        logging.exception("Failed to compute target checksum for %s: %s", table_name, e)
         tgt_checksum = ""
 
     checksum_match = (src_checksum == tgt_checksum) and src_checksum != ""
@@ -407,8 +427,9 @@ def copy_table(
                             else:
                                 try:
                                     mapping = dict(r)
-                                except Exception:
+                                except (TypeError, ValueError) as e:
                                     # Fallback: enumerate positional values
+                                    logging.debug("Row to dict failed while writing sample for %s: %s", table_name, e)
                                     mapping = {h: r[i] for i, h in enumerate(header)}
                             w.writerow([mapping.get(h) for h in header])
                     else:
@@ -438,7 +459,8 @@ def copy_table(
             else:
                 try:
                     data = {c.name: row[i] for i, c in enumerate(src_table.columns)}
-                except Exception:
+                except Exception as e:
+                    logging.debug("Falling back to positional mapping for row in %s: %s", table_name, e)
                     data = dict(row)
 
             # Build insert; prefer postgres ON CONFLICT DO NOTHING when available
@@ -459,7 +481,8 @@ def copy_table(
             # SQLAlchemy Result.rowcount should indicate whether a row was inserted
             try:
                 rc = res.rowcount if hasattr(res, "rowcount") else None
-            except Exception:
+            except Exception as e:
+                logging.debug("Failed to obtain rowcount for insert result into %s: %s", table_name, e)
                 rc = None
 
             if rc is None:
@@ -638,11 +661,11 @@ def main():
                         f"Verification for {t}: count_match={v.get('count_match')} checksum_match={v.get('checksum_match')}"
                     )
                 except Exception as e:
-                    logging.exception(f"Verification failed for {t}: {e}")
+                    logging.exception("Verification failed for %s: %s", t, e)
                     row.update({"verification_error": str(e)})
             report_rows.append(row)
         except Exception as e:
-            logging.exception(f"Error copying table {t}: {e}")
+            logging.exception("Error copying table %s: %s", t, e)
             print(f"Error copying table {t}: {e}")
     print(f"Done. Processed approximate total rows: {total_rows}")
 

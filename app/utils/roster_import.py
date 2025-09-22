@@ -41,10 +41,10 @@ def parse_roster(path_or_file):
                 name = calciatore.strip()
                 try:
                     c = float(str(costo).strip()) if costo not in (None, "") else 0.0
-                except Exception:
+                except (ValueError, TypeError):
                     try:
                         c = float(str(costo).replace(",", ".").strip())
-                    except Exception:
+                    except (ValueError, TypeError):
                         c = 0.0
                 team_players[tname].append(
                     {
@@ -80,6 +80,8 @@ def apply_roster(db_path, team_players, audit_info: dict | None = None):
     from sqlalchemy.orm import sessionmaker
 
     from app.models import ImportAudit
+    import logging
+    from sqlalchemy.exc import SQLAlchemyError
 
     engine = create_engine(f"sqlite:///{db_path}")
     Session = sessionmaker(bind=engine)
@@ -106,7 +108,9 @@ def apply_roster(db_path, team_players, audit_info: dict | None = None):
                     team = Team(name=team_name, cash=0)
                     s.add(team)
                     s.flush()
-            except Exception:
+            except Exception as e:
+                # Be explicit about failures resolving/creating Team; continue with raw SQL path
+                logging.exception("Failed to resolve or create Team '%s': %s", team_name, e)
                 team = None
 
             for p in players:
@@ -135,17 +139,20 @@ def apply_roster(db_path, team_players, audit_info: dict | None = None):
                         "R.": (ruolo[:1].upper().replace("G", "P") if ruolo else ""),
                     }
                     set_clause = ", ".join([f'"{k}" = :{k}' for k in updates.keys()])
+                    # Validate that update columns exist in the giocatori table
+                    cur_cols = [r[1] for r in s.execute(text("PRAGMA table_info(giocatori)")).fetchall()]
+                    for k in updates.keys():
+                        if k not in cur_cols:
+                            raise ValueError(f"Unexpected column name for giocatori update: {k}")
+
                     params = {**updates, "rowid": rowid}
                     try:
-                        s.execute(
-                            text(
-                                f"UPDATE giocatori SET {set_clause} WHERE rowid=:rowid"
-                            ),
-                            params,
-                        )
+                        # values are parameterized; identifiers were validated above
+                        s.execute(text("UPDATE giocatori SET " + set_clause + " WHERE rowid=:rowid"), params)  # nosec: B608 - identifiers validated, values parameterized
                         updated += 1
-                    except Exception:
-                        pass
+                    except SQLAlchemyError as e:
+                        logging.exception("Failed to update giocatori rowid=%s: %s", rowid, e)
+                        s.rollback()
                 else:
                     # insert new giocatori row using available columns
                     cur_cols = [
@@ -179,8 +186,9 @@ def apply_roster(db_path, team_players, audit_info: dict | None = None):
                                 to_insert,
                             )
                             inserted += 1
-                        except Exception:
-                            pass
+                        except SQLAlchemyError as e:
+                            logging.exception("Failed to insert giocatori for %s: %s", nome, e)
+                            s.rollback()
 
         # update team cash balances using SQL to preserve fantateam semantics
         for team_name in team_players.keys():
@@ -223,7 +231,8 @@ def apply_roster(db_path, team_players, audit_info: dict | None = None):
                 )
                 s.add(ia)
                 s.commit()
-            except Exception:
+            except SQLAlchemyError as e:
+                logging.exception("Failed to record ImportAudit: %s", e)
                 s.rollback()
 
     finally:

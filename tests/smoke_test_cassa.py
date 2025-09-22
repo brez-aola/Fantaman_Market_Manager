@@ -29,12 +29,12 @@ def db_path():
         # best-effort cleanup
         try:
             os.remove(db)
-        except Exception:
-            pass
+        except OSError as e:
+            print(f"Cleanup: failed to remove db {db}: {e}")
         try:
             os.rmdir(os.path.dirname(db))
-        except Exception:
-            pass
+        except OSError as e:
+            print(f"Cleanup: failed to remove temp dir for {db}: {e}")
 
 
 def atomic_charge(db_path, team, amount):

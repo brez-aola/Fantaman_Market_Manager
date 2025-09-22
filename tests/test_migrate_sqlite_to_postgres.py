@@ -301,8 +301,6 @@ def test_verify_columns_exclude_column(tmp_path):
     assert res["checksum_match"] is True
 
 
-
-
 @pytest.mark.cli
 def test_cli_verify_columns_per_table(tmp_path):
     # Ensure the script accepts per-table verify-columns mapping and that it causes verification to pass
