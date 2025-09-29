@@ -4,13 +4,15 @@ Handles all database operations for League model including team relationships
 and league management features.
 """
 
-from typing import Optional, List, Dict, Any
+import logging
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, desc
+
+from app.models import League, Player, Team
 
 from .base import BaseRepository
-from app.models import League, Team, Player
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +59,12 @@ class LeagueRepository(BaseRepository[League]):
         Returns:
             League instance with teams loaded, None if not found
         """
-        return self.db.query(League).options(
-            joinedload(League.teams)
-        ).filter(League.id == league_id).first()
+        return (
+            self.db.query(League)
+            .options(joinedload(League.teams))
+            .filter(League.id == league_id)
+            .first()
+        )
 
     def get_active_leagues(self) -> List[League]:
         """Get all active leagues.
@@ -67,11 +72,16 @@ class LeagueRepository(BaseRepository[League]):
         Returns:
             List of active leagues
         """
-        return self.db.query(League).filter(League.is_active == True).all()
+        return self.db.query(League).filter(League.is_active.is_(True)).all()
 
-    def create_league(self, name: str, slug: str = None,
-                     description: str = None, max_teams: int = 8,
-                     is_active: bool = True) -> League:
+    def create_league(
+        self,
+        name: str,
+        slug: str = None,
+        description: str = None,
+        max_teams: int = 8,
+        is_active: bool = True,
+    ) -> League:
         """Create a new league.
 
         Args:
@@ -86,16 +96,16 @@ class LeagueRepository(BaseRepository[League]):
         """
         if not slug:
             # Generate slug from name
-            slug = name.lower().replace(' ', '-').replace('_', '-')
+            slug = name.lower().replace(" ", "-").replace("_", "-")
             # Remove special characters
-            slug = ''.join(c for c in slug if c.isalnum() or c == '-')
+            slug = "".join(c for c in slug if c.isalnum() or c == "-")
 
         return self.create(
             name=name,
             slug=slug,
             description=description,
             max_teams=max_teams,
-            is_active=is_active
+            is_active=is_active,
         )
 
     def get_league_statistics(self, league_id: int) -> Dict[str, Any]:
@@ -116,22 +126,25 @@ class LeagueRepository(BaseRepository[League]):
         current_teams = len(teams)
 
         # Calculate total players and cash
-        total_players = self.db.query(Player).join(Team).filter(
-            Team.league_id == league_id
-        ).count()
+        total_players = (
+            self.db.query(Player).join(Team).filter(Team.league_id == league_id).count()
+        )
 
-        total_cash = self.db.query(func.sum(Team.cash)).filter(
-            Team.league_id == league_id
-        ).scalar() or 0
+        total_cash = (
+            self.db.query(func.sum(Team.cash))
+            .filter(Team.league_id == league_id)
+            .scalar()
+            or 0
+        )
 
         return {
-            'id': league.id,
-            'name': league.name,
-            'slug': league.slug,
-            'current_teams': current_teams,
-            'max_teams': 8,  # Default max teams
-            'total_players': total_players,
-            'total_cash': float(total_cash),
+            "id": league.id,
+            "name": league.name,
+            "slug": league.slug,
+            "current_teams": current_teams,
+            "max_teams": 8,  # Default max teams
+            "total_players": total_players,
+            "total_cash": float(total_cash),
         }
 
     def get_league_standings(self, league_id: int) -> List[Dict[str, Any]]:
@@ -148,43 +161,53 @@ class LeagueRepository(BaseRepository[League]):
 
         for team in teams:
             # Calculate team value
-            team_value = self.db.query(func.sum(Player.costo)).filter(
-                Player.team_id == team.id
-            ).scalar() or 0
+            team_value = (
+                self.db.query(func.sum(Player.costo))
+                .filter(Player.team_id == team.id)
+                .scalar()
+                or 0
+            )
 
             # Count players
-            player_count = self.db.query(Player).filter(Player.team_id == team.id).count()
+            player_count = (
+                self.db.query(Player).filter(Player.team_id == team.id).count()
+            )
 
             # Count by role
-            role_counts = self.db.query(
-                Player.role,
-                func.count(Player.id).label('count')
-            ).filter(Player.team_id == team.id).group_by(Player.role).all()
+            role_counts = (
+                self.db.query(Player.role, func.count(Player.id).label("count"))
+                .filter(Player.team_id == team.id)
+                .group_by(Player.role)
+                .all()
+            )
 
             role_distribution = {role: count for role, count in role_counts}
 
-            standings.append({
-                'team_id': team.id,
-                'team_name': team.name,
-                'owner_name': team.owner_name,
-                'cash': float(team.cash or 0),
-                'team_value': float(team_value),
-                'total_investment': float(team_value),
-                'player_count': player_count,
-                'role_distribution': role_distribution
-            })
+            standings.append(
+                {
+                    "team_id": team.id,
+                    "team_name": team.name,
+                    "owner_name": team.owner_name,
+                    "cash": float(team.cash or 0),
+                    "team_value": float(team_value),
+                    "total_investment": float(team_value),
+                    "player_count": player_count,
+                    "role_distribution": role_distribution,
+                }
+            )
 
         # Sort by total investment (descending) then by cash (descending)
-        standings.sort(key=lambda x: (x['total_investment'], x['cash']), reverse=True)
+        standings.sort(key=lambda x: (x["total_investment"], x["cash"]), reverse=True)
 
         # Add ranking
         for i, team_stats in enumerate(standings):
-            team_stats['rank'] = i + 1
+            team_stats["rank"] = i + 1
 
         return standings
 
-    def add_team_to_league(self, league_id: int, team_name: str,
-                          owner_name: str = None) -> Optional[Team]:
+    def add_team_to_league(
+        self, league_id: int, team_name: str, owner_name: str = None
+    ) -> Optional[Team]:
         """Add a team to the league.
 
         Args:
@@ -202,17 +225,20 @@ class LeagueRepository(BaseRepository[League]):
         # Check if league has space
         current_teams = self.db.query(Team).filter(Team.league_id == league_id).count()
         if current_teams >= league.max_teams:
-            logger.warning(f"League {league.name} is full ({current_teams}/{league.max_teams})")
+            logger.warning(
+                f"League {league.name} is full ({current_teams}/{league.max_teams})"
+            )
             return None
 
         # Create team
         from .team_repository import TeamRepository
+
         team_repo = TeamRepository(self.db)
         team = team_repo.create_team(
             name=team_name,
             league_id=league_id,
             owner_name=owner_name,
-            cash=500.0  # Default starting cash
+            cash=500.0,  # Default starting cash
         )
 
         logger.info(f"Added team {team_name} to league {league.name}")
@@ -228,17 +254,18 @@ class LeagueRepository(BaseRepository[League]):
         Returns:
             True if removed, False if team not found or not in league
         """
-        team = self.db.query(Team).filter(
-            Team.id == team_id,
-            Team.league_id == league_id
-        ).first()
+        team = (
+            self.db.query(Team)
+            .filter(Team.id == team_id, Team.league_id == league_id)
+            .first()
+        )
 
         if not team:
             return False
 
         # Release all players from the team
         self.db.query(Player).filter(Player.team_id == team_id).update(
-            {'team_id': None}
+            {"team_id": None}
         )
 
         # Delete team
@@ -248,7 +275,9 @@ class LeagueRepository(BaseRepository[League]):
         logger.info(f"Removed team {team.name} from league")
         return True
 
-    def get_free_agents_in_league(self, league_id: int, role: str = None) -> List[Player]:
+    def get_free_agents_in_league(
+        self, league_id: int, role: str = None
+    ) -> List[Player]:
         """Get free agents available for teams in the league.
 
         Note: This returns all free agents regardless of league,
@@ -268,7 +297,9 @@ class LeagueRepository(BaseRepository[League]):
 
         return query.all()
 
-    def search_leagues(self, search_term: str, active_only: bool = True) -> List[League]:
+    def search_leagues(
+        self, search_term: str, active_only: bool = True
+    ) -> List[League]:
         """Search leagues by name or description.
 
         Args:
@@ -283,12 +314,12 @@ class LeagueRepository(BaseRepository[League]):
         query = self.db.query(League).filter(
             or_(
                 League.name.ilike(f"%{search_term}%"),
-                League.description.ilike(f"%{search_term}%")
+                League.description.ilike(f"%{search_term}%"),
             )
         )
 
         if active_only:
-            query = query.filter(League.is_active == True)
+            query = query.filter(League.is_active.is_(True))
 
         return query.all()
 

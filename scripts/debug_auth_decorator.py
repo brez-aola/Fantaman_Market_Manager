@@ -60,10 +60,14 @@ def debug_jwt_token():
                     return False
 
                 # Test session query
-                user_session = session.query(UserSession).filter(
-                    UserSession.session_token == token,
-                    UserSession.is_active == True
-                ).first()
+                user_session = (
+                    session.query(UserSession)
+                    .filter(
+                        UserSession.session_token == token,
+                        UserSession.is_active.is_(True),
+                    )
+                    .first()
+                )
 
                 if user_session:
                     print(f"✅ User session found: ID {user_session.id}")
@@ -76,6 +80,7 @@ def debug_jwt_token():
             except Exception as e:
                 print(f"❌ Database query error: {e}")
                 import traceback
+
                 traceback.print_exc()
                 return False
             finally:
@@ -89,26 +94,38 @@ def debug_jwt_token():
 
                 # Print roles using a scalar query to avoid lazy-loading after session close
                 from app.models import Role, UserRole
-                role_rows = session.query(Role.name).join(UserRole, Role.id == UserRole.role_id).filter(UserRole.user_id == user.id).all()
+
+                role_rows = (
+                    session.query(Role.name)
+                    .join(UserRole, Role.id == UserRole.role_id)
+                    .filter(UserRole.user_id == user.id)
+                    .all()
+                )
                 print(f"   🎭 User roles: {[r[0] for r in role_rows]}")
                 print(f"   🔐 Has super_admin role: {user.has_role('super_admin')}")
-                print(f"   🔐 Has user.admin permission: {user.has_permission('user.admin')}")
+                print(
+                    f"   🔐 Has user.admin permission: {user.has_permission('user.admin')}"
+                )
 
             except Exception as e:
                 print(f"❌ Role/permission access error: {e}")
                 import traceback
+
                 traceback.print_exc()
                 return False
             finally:
                 session.close()
 
             print("\n✅ All JWT and database operations successful!")
-            print("🤔 The issue might be in the decorator implementation or Flask context.")
+            print(
+                "🤔 The issue might be in the decorator implementation or Flask context."
+            )
             return True
 
         except Exception as e:
             print(f"❌ Unexpected error: {e}")
             import traceback
+
             traceback.print_exc()
             return False
 

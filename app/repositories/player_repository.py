@@ -4,13 +4,15 @@ Handles all database operations for Player model including team relationships
 and player market features.
 """
 
-from typing import Optional, List, Dict, Any
+import logging
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import and_, desc, func, or_
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, or_, desc, asc, func
+
+from app.models import Player
 
 from .base import BaseRepository
-from app.models import Player, Team
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -93,13 +95,16 @@ class PlayerRepository(BaseRepository[Player]):
         Returns:
             Player instance with team loaded, None if not found
         """
-        return self.db.query(Player).options(
-            joinedload(Player.team)
-        ).filter(Player.id == player_id).first()
+        return (
+            self.db.query(Player)
+            .options(joinedload(Player.team))
+            .filter(Player.id == player_id)
+            .first()
+        )
 
-    def get_players_by_cost_range(self, min_cost: float = None,
-                                 max_cost: float = None,
-                                 role: str = None) -> List[Player]:
+    def get_players_by_cost_range(
+        self, min_cost: float = None, max_cost: float = None, role: str = None
+    ) -> List[Player]:
         """Get players by cost range.
 
         Args:
@@ -123,7 +128,9 @@ class PlayerRepository(BaseRepository[Player]):
 
         return query.all()
 
-    def get_most_expensive_players(self, role: str = None, limit: int = 10) -> List[Player]:
+    def get_most_expensive_players(
+        self, role: str = None, limit: int = 10
+    ) -> List[Player]:
         """Get most expensive players.
 
         Args:
@@ -149,16 +156,22 @@ class PlayerRepository(BaseRepository[Player]):
         Returns:
             List of injured players
         """
-        query = self.db.query(Player).filter(Player.is_injured == True)
+        query = self.db.query(Player).filter(Player.is_injured.is_(True))
 
         if team_id:
             query = query.filter(Player.team_id == team_id)
 
         return query.all()
 
-    def create_player(self, name: str, role: str = None,
-                     squadra_reale: str = None, costo: float = None,
-                     team_id: int = None, is_injured: bool = False) -> Player:
+    def create_player(
+        self,
+        name: str,
+        role: str = None,
+        squadra_reale: str = None,
+        costo: float = None,
+        team_id: int = None,
+        is_injured: bool = False,
+    ) -> Player:
         """Create a new player.
 
         Args:
@@ -178,7 +191,7 @@ class PlayerRepository(BaseRepository[Player]):
             squadra_reale=squadra_reale,
             costo=costo,
             team_id=team_id,
-            is_injured=is_injured
+            is_injured=is_injured,
         )
 
     def assign_to_team(self, player_id: int, team_id: int) -> bool:
@@ -199,7 +212,9 @@ class PlayerRepository(BaseRepository[Player]):
         player.team_id = team_id
         self.db.commit()
 
-        logger.info(f"Assigned player {player.name} from team {old_team_id} to team {team_id}")
+        logger.info(
+            f"Assigned player {player.name} from team {old_team_id} to team {team_id}"
+        )
         return True
 
     def release_from_team(self, player_id: int) -> bool:
@@ -243,8 +258,13 @@ class PlayerRepository(BaseRepository[Player]):
         logger.info(f"Updated player {player.name} injury status: {status}")
         return True
 
-    def search_players(self, search_term: str, role: str = None,
-                      team_id: int = None, available_only: bool = False) -> List[Player]:
+    def search_players(
+        self,
+        search_term: str,
+        role: str = None,
+        team_id: int = None,
+        available_only: bool = False,
+    ) -> List[Player]:
         """Search players by name or real team.
 
         Args:
@@ -259,7 +279,7 @@ class PlayerRepository(BaseRepository[Player]):
         query = self.db.query(Player).filter(
             or_(
                 Player.name.ilike(f"%{search_term}%"),
-                Player.squadra_reale.ilike(f"%{search_term}%")
+                Player.squadra_reale.ilike(f"%{search_term}%"),
             )
         )
 
@@ -286,37 +306,43 @@ class PlayerRepository(BaseRepository[Player]):
         free_agents = total_players - assigned_players
 
         # Players by role
-        roles = ['P', 'D', 'C', 'A']
+        roles = ["P", "D", "C", "A"]
         role_stats = {}
         for role in roles:
             total = self.count(role=role)
-            assigned = self.db.query(Player).filter(
-                and_(Player.role == role, Player.team_id.isnot(None))
-            ).count()
+            assigned = (
+                self.db.query(Player)
+                .filter(and_(Player.role == role, Player.team_id.isnot(None)))
+                .count()
+            )
             role_stats[role] = {
-                'total': total,
-                'assigned': assigned,
-                'available': total - assigned
+                "total": total,
+                "assigned": assigned,
+                "available": total - assigned,
             }
 
         # Cost statistics
-        cost_stats = self.db.query(
-            func.avg(Player.costo).label('avg_cost'),
-            func.min(Player.costo).label('min_cost'),
-            func.max(Player.costo).label('max_cost')
-        ).filter(Player.costo.isnot(None)).first()
+        cost_stats = (
+            self.db.query(
+                func.avg(Player.costo).label("avg_cost"),
+                func.min(Player.costo).label("min_cost"),
+                func.max(Player.costo).label("max_cost"),
+            )
+            .filter(Player.costo.isnot(None))
+            .first()
+        )
 
         return {
-            'total_players': total_players,
-            'assigned_players': assigned_players,
-            'free_agents': free_agents,
-            'role_distribution': role_stats,
-            'cost_statistics': {
-                'average': float(cost_stats.avg_cost or 0),
-                'minimum': float(cost_stats.min_cost or 0),
-                'maximum': float(cost_stats.max_cost or 0)
+            "total_players": total_players,
+            "assigned_players": assigned_players,
+            "free_agents": free_agents,
+            "role_distribution": role_stats,
+            "cost_statistics": {
+                "average": float(cost_stats.avg_cost or 0),
+                "minimum": float(cost_stats.min_cost or 0),
+                "maximum": float(cost_stats.max_cost or 0),
             },
-            'injured_players': self.count(is_injured=True)
+            "injured_players": self.count(is_injured=True),
         }
 
     def get_team_composition(self, team_id: int) -> Dict[str, Any]:
@@ -331,40 +357,42 @@ class PlayerRepository(BaseRepository[Player]):
         players = self.get_by_team(team_id)
 
         composition = {
-            'P': [],  # Portieri
-            'D': [],  # Difensori
-            'C': [],  # Centrocampisti
-            'A': []   # Attaccanti
+            "P": [],  # Portieri
+            "D": [],  # Difensori
+            "C": [],  # Centrocampisti
+            "A": [],  # Attaccanti
         }
 
         total_cost = 0
         injured_count = 0
 
         for player in players:
-            role = player.role or 'Unknown'
+            role = player.role or "Unknown"
             if role in composition:
-                composition[role].append({
-                    'id': player.id,
-                    'name': player.name,
-                    'real_team': player.squadra_reale,
-                    'cost': player.costo or 0,
-                    'is_injured': player.is_injured or False
-                })
+                composition[role].append(
+                    {
+                        "id": player.id,
+                        "name": player.name,
+                        "real_team": player.squadra_reale,
+                        "cost": player.costo or 0,
+                        "is_injured": player.is_injured or False,
+                    }
+                )
 
             total_cost += player.costo or 0
             if player.is_injured:
                 injured_count += 1
 
         return {
-            'team_id': team_id,
-            'total_players': len(players),
-            'total_cost': total_cost,
-            'injured_players': injured_count,
-            'composition': {
-                'goalkeepers': len(composition['P']),
-                'defenders': len(composition['D']),
-                'midfielders': len(composition['C']),
-                'forwards': len(composition['A'])
+            "team_id": team_id,
+            "total_players": len(players),
+            "total_cost": total_cost,
+            "injured_players": injured_count,
+            "composition": {
+                "goalkeepers": len(composition["P"]),
+                "defenders": len(composition["D"]),
+                "midfielders": len(composition["C"]),
+                "forwards": len(composition["A"]),
             },
-            'players_by_role': composition
+            "players_by_role": composition,
         }

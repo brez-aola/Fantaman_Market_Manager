@@ -5,7 +5,6 @@ and account management.
 """
 
 import logging
-from typing import Dict, Any
 
 from flask import Blueprint, current_app, g, jsonify, request
 
@@ -45,12 +44,13 @@ def debug_auth():
     session = Session()
 
     try:
-        from ..models import UserSession, User
+        from ..models import User, UserSession
 
-        user_session = session.query(UserSession).filter(
-            UserSession.session_token == token,
-            UserSession.is_active == True
-        ).first()
+        user_session = (
+            session.query(UserSession)
+            .filter(UserSession.session_token == token, UserSession.is_active.is_(True))
+            .first()
+        )
 
         if not user_session or user_session.is_expired():
             return jsonify({"error": "Session expired"}), 401
@@ -59,26 +59,29 @@ def debug_auth():
         if not user or not user.is_active:
             return jsonify({"error": "User account inactive"}), 401
 
-        return jsonify({
-            "success": True,
-            "message": "All authentication checks passed",
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "is_active": user.is_active
-            },
-            "session": {
-                "id": user_session.id,
-                "expires_at": user_session.expires_at.isoformat(),
-                "is_expired": user_session.is_expired()
-            },
-            "payload": payload
-        })
+        return jsonify(
+            {
+                "success": True,
+                "message": "All authentication checks passed",
+                "user": {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "is_active": user.is_active,
+                },
+                "session": {
+                    "id": user_session.id,
+                    "expires_at": user_session.expires_at.isoformat(),
+                    "is_expired": user_session.is_expired(),
+                },
+                "payload": payload,
+            }
+        )
 
     except Exception as e:
         current_app.logger.error(f"Debug auth error: {e}")
         import traceback
+
         current_app.logger.error(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
     finally:
@@ -90,6 +93,7 @@ def simple_test():
     """Simple test endpoint to verify decorator is working."""
     try:
         from ..models import User
+
         Session = current_app.extensions["db_session_factory"]
         session = Session()
         user = session.query(User).first()
@@ -104,17 +108,17 @@ def simple_test():
 
         session.close()
 
-        return jsonify({
-            "message": "Simple test passed",
-            "user_count": 1 if user else 0,
-            "user": user_data
-        })
+        return jsonify(
+            {
+                "message": "Simple test passed",
+                "user_count": 1 if user else 0,
+                "user": user_data,
+            }
+        )
     except Exception as e:
         import traceback
-        return jsonify({
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
 
 @bp.route("/test-decorator", methods=["GET"])
@@ -122,18 +126,20 @@ def simple_test():
 def test_decorator():
     """Test endpoint to check if decorator works."""
     try:
-        return jsonify({
-            "message": "Decorator test passed",
-            "g_user_id": getattr(g, 'current_user_id', None),
-            "g_user_data": getattr(g, 'current_user_data', None),
-            "session_id": getattr(g, 'current_session_id', None)
-        })
+        return jsonify(
+            {
+                "message": "Decorator test passed",
+                "g_user_id": getattr(g, "current_user_id", None),
+                "g_user_data": getattr(g, "current_user_data", None),
+                "session_id": getattr(g, "current_session_id", None),
+            }
+        )
     except Exception as e:
         import traceback
-        return jsonify({
-            "error": str(e),
-            "traceback": traceback.format_exc()
-        }), 500
+
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+
+
 def get_auth_service() -> AuthService:
     """Get authentication service instance."""
     session_factory = current_app.extensions["db_session_factory"]
@@ -167,10 +173,7 @@ def login():
         if error:
             return jsonify({"error": error}), 401
 
-        return jsonify({
-            "message": "Login successful",
-            **tokens
-        }), 200
+        return jsonify({"message": "Login successful", **tokens}), 200
 
     except Exception as e:
         logger.error(f"Login error: {e}")
@@ -200,24 +203,26 @@ def register():
         # Create user
         auth_service = get_auth_service()
         user, error = auth_service.create_user(
-            username=username,
-            email=email,
-            password=password,
-            full_name=full_name
+            username=username, email=email, password=password, full_name=full_name
         )
 
         if error:
             return jsonify({"error": error}), 400
 
-        return jsonify({
-            "message": "User registered successfully",
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "full_name": user.full_name
-            }
-        }), 201
+        return (
+            jsonify(
+                {
+                    "message": "User registered successfully",
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                        "full_name": user.full_name,
+                    },
+                }
+            ),
+            201,
+        )
 
     except Exception as e:
         logger.error(f"Registration error: {e}")
@@ -248,10 +253,7 @@ def refresh_token():
         # Remove session object from response
         tokens.pop("session", None)
 
-        return jsonify({
-            "message": "Token refreshed successfully",
-            **tokens
-        }), 200
+        return jsonify({"message": "Token refreshed successfully", **tokens}), 200
 
     except Exception as e:
         logger.error(f"Token refresh error: {e}")
@@ -293,19 +295,25 @@ def get_current_user_info():
             return jsonify({"error": "User not found"}), 404
 
         # Simple response to debug
-        return jsonify({
-            "user": {
-                "id": user.id,
-                "username": user.username,
-                "email": user.email,
-                "is_active": user.is_active,
-                "created_at": user.created_at  # created_at is already a string from get_current_user()
-            }
-        }), 200
+        return (
+            jsonify(
+                {
+                    "user": {
+                        "id": user.id,
+                        "username": user.username,
+                        "email": user.email,
+                        "is_active": user.is_active,
+                        "created_at": user.created_at,  # created_at is already a string from get_current_user()
+                    }
+                }
+            ),
+            200,
+        )
 
     except Exception as e:
         logger.error(f"Get user info error: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return jsonify({"error": "Internal server error", "details": str(e)}), 500
 
@@ -360,19 +368,25 @@ def list_users():
         auth_service = get_auth_service()
         user_dicts, total = auth_service.list_users(page, per_page, search)
 
-        return jsonify({
-            "users": user_dicts,
-            "pagination": {
-                "page": page,
-                "per_page": per_page,
-                "total": total,
-                "pages": (total + per_page - 1) // per_page
-            }
-        }), 200
+        return (
+            jsonify(
+                {
+                    "users": user_dicts,
+                    "pagination": {
+                        "page": page,
+                        "per_page": per_page,
+                        "total": total,
+                        "pages": (total + per_page - 1) // per_page,
+                    },
+                }
+            ),
+            200,
+        )
 
     except Exception as e:
         logger.error(f"List users error: {e}")
         import traceback
+
         logger.error(traceback.format_exc())
         return jsonify({"error": "Internal server error"}), 500
 
@@ -393,9 +407,7 @@ def assign_user_role(user_id: int):
             return jsonify({"error": "Role name required"}), 400
 
         auth_service = get_auth_service()
-        success, error = auth_service.assign_role(
-            user_id, role_name, current_user.id
-        )
+        success, error = auth_service.assign_role(user_id, role_name, current_user.id)
 
         if error:
             return jsonify({"error": error}), 400
@@ -415,9 +427,7 @@ def remove_user_role(user_id: int, role_name: str):
         current_user = get_current_user()
 
         auth_service = get_auth_service()
-        success, error = auth_service.remove_role(
-            user_id, role_name, current_user.id
-        )
+        success, error = auth_service.remove_role(user_id, role_name, current_user.id)
 
         if error:
             return jsonify({"error": error}), 400

@@ -4,14 +4,16 @@ Handles all database operations for User model including authentication
 and authorization related queries.
 """
 
-from typing import Optional, List
-from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, or_
+import logging
 from datetime import datetime, timedelta
+from typing import List, Optional
+
+from sqlalchemy import and_, or_
+from sqlalchemy.orm import Session, joinedload
+
+from app.models import Role, RolePermission, User, UserRole
 
 from .base import BaseRepository
-from app.models import User, Role, Permission, UserRole, RolePermission
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +60,11 @@ class UserRepository(BaseRepository[User]):
         Returns:
             User instance if found, None otherwise
         """
-        return self.db.query(User).filter(
-            or_(User.username == identifier, User.email == identifier)
-        ).first()
+        return (
+            self.db.query(User)
+            .filter(or_(User.username == identifier, User.email == identifier))
+            .first()
+        )
 
     def get_with_roles(self, user_id: int) -> Optional[User]:
         """Get user with roles eagerly loaded.
@@ -71,9 +75,12 @@ class UserRepository(BaseRepository[User]):
         Returns:
             User instance with roles loaded, None if not found
         """
-        return self.db.query(User).options(
-            joinedload(User.roles)
-        ).filter(User.id == user_id).first()
+        return (
+            self.db.query(User)
+            .options(joinedload(User.roles))
+            .filter(User.id == user_id)
+            .first()
+        )
 
     def get_with_permissions(self, user_id: int) -> Optional[User]:
         """Get user with all permissions loaded.
@@ -85,9 +92,17 @@ class UserRepository(BaseRepository[User]):
             User with permissions loaded or None
         """
         try:
-            user = self.db.query(User).options(
-                joinedload(User.roles).joinedload(UserRole.role).joinedload(Role.permissions).joinedload(RolePermission.permission)
-            ).filter(User.id == user_id).first()
+            user = (
+                self.db.query(User)
+                .options(
+                    joinedload(User.roles)
+                    .joinedload(UserRole.role)
+                    .joinedload(Role.permissions)
+                    .joinedload(RolePermission.permission)
+                )
+                .filter(User.id == user_id)
+                .first()
+            )
 
             if user:
                 logger.info(f"Found user {user.username} with {len(user.roles)} roles")
@@ -103,7 +118,7 @@ class UserRepository(BaseRepository[User]):
         Returns:
             List of active users
         """
-        return self.db.query(User).filter(User.is_active == True).all()
+        return self.db.query(User).filter(User.is_active.is_(True)).all()
 
     def get_users_by_role(self, role_name: str) -> List[User]:
         """Get users by role name.
@@ -114,13 +129,17 @@ class UserRepository(BaseRepository[User]):
         Returns:
             List of users with the specified role
         """
-        return self.db.query(User).join(User.roles).filter(
-            Role.name == role_name
-        ).all()
+        return self.db.query(User).join(User.roles).filter(Role.name == role_name).all()
 
-    def create_user(self, username: str, email: str, hashed_password: str,
-                   full_name: str = None, is_active: bool = True,
-                   is_verified: bool = False) -> User:
+    def create_user(
+        self,
+        username: str,
+        email: str,
+        hashed_password: str,
+        full_name: str = None,
+        is_active: bool = True,
+        is_verified: bool = False,
+    ) -> User:
         """Create a new user.
 
         Args:
@@ -141,7 +160,7 @@ class UserRepository(BaseRepository[User]):
             full_name=full_name,
             is_active=is_active,
             is_verified=is_verified,
-            created_at=datetime.utcnow()
+            created_at=datetime.utcnow(),
         )
 
     def update_last_login(self, user_id: int) -> bool:
@@ -181,7 +200,9 @@ class UserRepository(BaseRepository[User]):
         # Lock account if too many failed attempts (e.g., 5)
         if user.failed_login_attempts >= 5:
             user.account_locked_until = datetime.utcnow() + timedelta(minutes=30)
-            logger.warning(f"Account locked for user {user.username} due to failed login attempts")
+            logger.warning(
+                f"Account locked for user {user.username} due to failed login attempts"
+            )
 
         self.db.commit()
         return True
@@ -245,9 +266,11 @@ class UserRepository(BaseRepository[User]):
             return False
 
         # Check if role already assigned
-        existing = self.db.query(UserRole).filter(
-            and_(UserRole.user_id == user_id, UserRole.role_id == role_id)
-        ).first()
+        existing = (
+            self.db.query(UserRole)
+            .filter(and_(UserRole.user_id == user_id, UserRole.role_id == role_id))
+            .first()
+        )
 
         if existing:
             return True  # Already assigned
@@ -256,7 +279,7 @@ class UserRepository(BaseRepository[User]):
             user_id=user_id,
             role_id=role_id,
             assigned_by=assigned_by,
-            assigned_at=datetime.utcnow()
+            assigned_at=datetime.utcnow(),
         )
         self.db.add(user_role)
         self.db.commit()
@@ -275,9 +298,11 @@ class UserRepository(BaseRepository[User]):
         """
         from app.models import UserRole
 
-        user_role = self.db.query(UserRole).filter(
-            and_(UserRole.user_id == user_id, UserRole.role_id == role_id)
-        ).first()
+        user_role = (
+            self.db.query(UserRole)
+            .filter(and_(UserRole.user_id == user_id, UserRole.role_id == role_id))
+            .first()
+        )
 
         if not user_role:
             return False
@@ -287,7 +312,9 @@ class UserRepository(BaseRepository[User]):
         logger.info(f"Removed role {role_id} from user {user_id}")
         return True
 
-    def search_users(self, search_term: str, skip: int = 0, limit: int = 20) -> List[User]:
+    def search_users(
+        self, search_term: str, skip: int = 0, limit: int = 20
+    ) -> List[User]:
         """Search users by username, email, or full name.
 
         Args:
@@ -298,10 +325,16 @@ class UserRepository(BaseRepository[User]):
         Returns:
             List of users matching search term
         """
-        return self.db.query(User).filter(
-            or_(
-                User.username.ilike(f"%{search_term}%"),
-                User.email.ilike(f"%{search_term}%"),
-                User.full_name.ilike(f"%{search_term}%")
+        return (
+            self.db.query(User)
+            .filter(
+                or_(
+                    User.username.ilike(f"%{search_term}%"),
+                    User.email.ilike(f"%{search_term}%"),
+                    User.full_name.ilike(f"%{search_term}%"),
+                )
             )
-        ).offset(skip).limit(limit).all()
+            .offset(skip)
+            .limit(limit)
+            .all()
+        )

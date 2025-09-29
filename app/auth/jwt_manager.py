@@ -22,7 +22,9 @@ class JWTManager:
     @property
     def secret_key(self) -> str:
         """Get JWT secret key from app config."""
-        return current_app.config.get("JWT_SECRET_KEY") or current_app.config["SECRET_KEY"]
+        return (
+            current_app.config.get("JWT_SECRET_KEY") or current_app.config["SECRET_KEY"]
+        )
 
     @property
     def access_token_expire_minutes(self) -> int:
@@ -34,8 +36,12 @@ class JWTManager:
         """Refresh token expiration time in days."""
         return current_app.config.get("JWT_REFRESH_TOKEN_EXPIRE_DAYS", 7)
 
-    def generate_tokens(self, user: User, ip_address: Optional[str] = None,
-                       user_agent: Optional[str] = None) -> Dict[str, Any]:
+    def generate_tokens(
+        self,
+        user: User,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Generate access and refresh tokens for a user."""
         now = datetime.datetime.utcnow()
 
@@ -46,7 +52,11 @@ class JWTManager:
         try:
             # If SQLAlchemy instance, use attribute access guarded by getattr
             if hasattr(user, "roles"):
-                roles_list = [getattr(ur.role, "name", None) for ur in getattr(user, "roles") if getattr(ur, "role", None) is not None]
+                roles_list = [
+                    getattr(ur.role, "name", None)
+                    for ur in getattr(user, "roles")
+                    if getattr(ur, "role", None) is not None
+                ]
                 roles_list = [r for r in roles_list if r]
         except Exception:
             roles_list = []
@@ -58,11 +68,13 @@ class JWTManager:
             "roles": roles_list,
             "iat": now,
             "exp": now + datetime.timedelta(minutes=self.access_token_expire_minutes),
-            "type": "access"
+            "type": "access",
         }
 
         # Generate tokens
-        access_token = jwt.encode(access_payload, self.secret_key, algorithm=self.algorithm)
+        access_token = jwt.encode(
+            access_payload, self.secret_key, algorithm=self.algorithm
+        )
         refresh_token = secrets.token_urlsafe(64)
 
         # Store session in database
@@ -71,9 +83,10 @@ class JWTManager:
             session_token=access_token,
             refresh_token=refresh_token,
             expires_at=access_payload["exp"],
-            refresh_expires_at=now + datetime.timedelta(days=self.refresh_token_expire_days),
+            refresh_expires_at=now
+            + datetime.timedelta(days=self.refresh_token_expire_days),
             ip_address=ip_address,
-            user_agent=user_agent
+            user_agent=user_agent,
         )
 
         return {
@@ -81,7 +94,7 @@ class JWTManager:
             "refresh_token": refresh_token,
             "token_type": "bearer",
             "expires_in": self.access_token_expire_minutes * 60,
-            "session": session
+            "session": session,
         }
 
     def verify_token(self, token: str) -> Optional[Dict[str, Any]]:
@@ -99,16 +112,21 @@ class JWTManager:
         except jwt.InvalidTokenError:
             return None
 
-    def refresh_access_token(self, refresh_token: str,
-                           session_factory) -> Optional[Dict[str, Any]]:
+    def refresh_access_token(
+        self, refresh_token: str, session_factory
+    ) -> Optional[Dict[str, Any]]:
         """Generate new access token using refresh token."""
         session = session_factory()
         try:
             # Find active session with this refresh token
-            user_session = session.query(UserSession).filter(
-                UserSession.refresh_token == refresh_token,
-                UserSession.is_active == True
-            ).first()
+            user_session = (
+                session.query(UserSession)
+                .filter(
+                    UserSession.refresh_token == refresh_token,
+                    UserSession.is_active.is_(True),
+                )
+                .first()
+            )
 
             if not user_session or user_session.is_refresh_expired():
                 return None
@@ -119,9 +137,7 @@ class JWTManager:
 
             # Generate new tokens
             tokens = self.generate_tokens(
-                user,
-                user_session.ip_address,
-                user_session.user_agent
+                user, user_session.ip_address, user_session.user_agent
             )
 
             # Deactivate old session
@@ -144,10 +160,13 @@ class JWTManager:
         """Revoke a specific token by deactivating its session."""
         session = session_factory()
         try:
-            user_session = session.query(UserSession).filter(
-                UserSession.session_token == token,
-                UserSession.is_active == True
-            ).first()
+            user_session = (
+                session.query(UserSession)
+                .filter(
+                    UserSession.session_token == token, UserSession.is_active.is_(True)
+                )
+                .first()
+            )
 
             if user_session:
                 user_session.is_active = False
@@ -167,10 +186,11 @@ class JWTManager:
         """Revoke all active sessions for a user."""
         session = session_factory()
         try:
-            sessions = session.query(UserSession).filter(
-                UserSession.user_id == user_id,
-                UserSession.is_active == True
-            ).all()
+            sessions = (
+                session.query(UserSession)
+                .filter(UserSession.user_id == user_id, UserSession.is_active.is_(True))
+                .all()
+            )
 
             for user_session in sessions:
                 user_session.is_active = False
@@ -192,9 +212,11 @@ class JWTManager:
             now = datetime.datetime.utcnow()
 
             # Find expired sessions
-            expired_sessions = session.query(UserSession).filter(
-                UserSession.refresh_expires_at < now
-            ).all()
+            expired_sessions = (
+                session.query(UserSession)
+                .filter(UserSession.refresh_expires_at < now)
+                .all()
+            )
 
             count = len(expired_sessions)
 

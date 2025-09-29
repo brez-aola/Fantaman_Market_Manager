@@ -7,7 +7,7 @@ for all requests.
 import logging
 from typing import Optional
 
-from flask import Flask, g, request
+from flask import Flask, request
 
 from ..models import User, UserSession
 from .jwt_manager import JWTManager
@@ -34,7 +34,9 @@ class AuthMiddleware:
         if self._should_skip_auth():
             return
         # Initialize auth context (store primitives only to avoid detached ORM instances)
-        from flask import g as _g, current_app
+        from flask import current_app
+        from flask import g as _g
+
         _g.current_user_data = None
         _g.current_user_roles = []
         _g.current_user_permissions = []
@@ -62,10 +64,14 @@ class AuthMiddleware:
             session = Session()
             try:
                 # Check if session is active
-                user_session = session.query(UserSession).filter(
-                    UserSession.session_token == token,
-                    UserSession.is_active == True
-                ).first()
+                user_session = (
+                    session.query(UserSession)
+                    .filter(
+                        UserSession.session_token == token,
+                        UserSession.is_active.is_(True),
+                    )
+                    .first()
+                )
 
                 if not user_session or user_session.is_expired():
                     return
@@ -77,20 +83,31 @@ class AuthMiddleware:
 
                 # Set authentication context using primitives (avoid storing ORM objects)
                 try:
-                    from ..models import Role, UserRole, RolePermission, Permission
+                    from ..models import Permission, Role, RolePermission, UserRole
 
-                    role_rows = session.query(Role.name).join(UserRole, Role.id == UserRole.role_id).filter(
-                        UserRole.user_id == user.id
-                    ).all()
+                    role_rows = (
+                        session.query(Role.name)
+                        .join(UserRole, Role.id == UserRole.role_id)
+                        .filter(UserRole.user_id == user.id)
+                        .all()
+                    )
                     user_roles = [r[0] for r in role_rows]
                 except Exception:
                     user_roles = []
 
                 perms = set()
                 try:
-                    perm_rows = session.query(Permission.name).join(RolePermission, Permission.id == RolePermission.permission_id).join(
-                        Role, RolePermission.role_id == Role.id
-                    ).join(UserRole, UserRole.role_id == Role.id).filter(UserRole.user_id == user.id).all()
+                    perm_rows = (
+                        session.query(Permission.name)
+                        .join(
+                            RolePermission,
+                            Permission.id == RolePermission.permission_id,
+                        )
+                        .join(Role, RolePermission.role_id == Role.id)
+                        .join(UserRole, UserRole.role_id == Role.id)
+                        .filter(UserRole.user_id == user.id)
+                        .all()
+                    )
                     for p in perm_rows:
                         perms.add(p[0])
                 except Exception:
@@ -101,7 +118,9 @@ class AuthMiddleware:
                     "username": user.username,
                     "email": user.email,
                     "is_active": user.is_active,
-                    "created_at": user.created_at.isoformat() if user.created_at else None,
+                    "created_at": (
+                        user.created_at.isoformat() if user.created_at else None
+                    ),
                 }
                 _g.current_user_roles = user_roles
                 _g.current_user_permissions = list(perms)
@@ -111,6 +130,7 @@ class AuthMiddleware:
 
                 # Update last used timestamp
                 import datetime
+
                 user_session.last_used_at = datetime.datetime.utcnow()
                 session.commit()
 
@@ -132,8 +152,12 @@ class AuthMiddleware:
 
         # Add CORS headers if needed
         if request.method == "OPTIONS":
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS"
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+            response.headers["Access-Control-Allow-Methods"] = (
+                "GET, POST, PUT, DELETE, OPTIONS"
+            )
+            response.headers["Access-Control-Allow-Headers"] = (
+                "Content-Type, Authorization"
+            )
 
         return response
 
@@ -172,7 +196,7 @@ class AuthMiddleware:
             "auth.register",
             "auth.refresh",
             "auth.forgot_password",
-            "auth.reset_password"
+            "auth.reset_password",
         ]
 
         if request.endpoint in auth_endpoints:
