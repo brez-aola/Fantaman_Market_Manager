@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from difflib import get_close_matches
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -35,15 +35,15 @@ def resolve_team_by_alias(
     q_name = name.strip()
     league_id = None
     if league_slug:
-        league = session.query(League).filter(League.slug == league_slug).first()
+        league = session.query(League).filter(League.slug == league_slug).first()  # type: ignore[attr-defined]
         if league:
             league_id = league.id
     # 1
     if league_id:
         t = (
             session.query(Team)
-            .filter(Team.name == q_name, Team.league_id == league_id)
-            .first()
+            .filter(Team.name == q_name, Team.league_id == league_id)  # type: ignore[attr-defined]
+            .first()  # type: ignore[attr-defined]
         )
         if t:
             return t
@@ -111,7 +111,7 @@ def populate_team_aliases(
 
     # Build map cash -> team id (could be many to one)
     teams = session.query(Team).all()
-    cash_map = {}
+    cash_map: Dict[int, List[Team]] = {}
     name_list = [t.name for t in teams]
     for t in teams:
         cash_map.setdefault(t.cash, []).append(t)
@@ -185,14 +185,17 @@ def populate_team_aliases(
                 if canon_team:
                     matched_team = canon_team
 
-            # dedupe alias insertion (case-insensitive)
-            exists = (
-                session.query(TeamAlias)
-                .filter(TeamAlias.team_id == matched_team.id)
-                .filter(TeamAlias.alias.ilike(alias_name))
-                .first()
-            )
-            if not exists:
+            # dedupe alias insertion (case-insensitive) - skip if no matched team
+            if matched_team:
+                exists = (
+                    session.query(TeamAlias)
+                    .filter(TeamAlias.team_id == matched_team.id)
+                    .filter(TeamAlias.alias.ilike(alias_name))
+                    .first()
+                )
+            else:
+                exists = None
+            if not exists and matched_team:
                 ta = TeamAlias(team_id=matched_team.id, alias=alias_name)
                 session.add(ta)
                 created.append(ta)

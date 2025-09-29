@@ -1,9 +1,8 @@
+import logging
 from typing import List, Optional
 
-import logging
-
-from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 
 from app.domain.models import Player as DomainPlayer
 from app.domain.models import Team as DomainTeam

@@ -1,4 +1,6 @@
+import logging
 import os
+import sqlite3
 
 import pandas as pd
 
@@ -33,13 +35,9 @@ if "anni_contratto" not in columns:
         )
     except sqlite3.DatabaseError:
         # Some SQLite versions or schema states may raise a DatabaseError here; best-effort continue
-        import sqlite3
-        logging = __import__("logging")
         logging.debug("ALTER TABLE anni_contratto ignored: sqlite DatabaseError")
     except Exception as e:
         # Unexpected errors should be reported rather than silently swallowed
-        import logging
-
         logging.exception("Unexpected error while ALTER TABLE giocatori: %s", e)
 
 # Aggiungi la colonna al DataFrame se non esiste

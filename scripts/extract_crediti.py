@@ -1,6 +1,7 @@
 import json
 import re
 from pathlib import Path
+from typing import Dict, Optional
 
 from openpyxl import load_workbook
 
@@ -27,14 +28,15 @@ for t in team_starts:
     print(" ", t)
 
 crediti_re = re.compile(r"crediti\s*residui\s*[:\-]?\s*(\d+)", re.I)
-proposed = {}
+
+proposed: Dict[str, Optional[int]] = {}
 for col, name in team_starts:
     last = None
     for r in rows:
         v = None
         try:
             v = r[col]
-        except (IndexError, TypeError) as e:
+        except (IndexError, TypeError):
             # missing column in this row or unexpected row shape; skip
             # keep silent at normal operation but log when debugging
             # (avoid importing logging at module-level for small script)

@@ -30,12 +30,11 @@ import re
 import shutil
 import subprocess
 import sys
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from sqlalchemy import MetaData, Table, create_engine, insert, select, text
 from sqlalchemy.engine import Engine
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 
 def parse_args():
@@ -84,7 +83,7 @@ def parse_args():
     return p.parse_args()
 
 
-def ensure_engines(src_path: str, target_url: str) -> (Engine, Engine):
+def ensure_engines(src_path: str, target_url: str) -> Tuple[Engine, Engine]:
     if not os.path.isfile(src_path):
         raise SystemExit(f"Source sqlite DB not found: {src_path}")
     sqlite_url = f"sqlite:///{os.path.abspath(src_path)}"
@@ -148,7 +147,9 @@ def backup_target_db(database_url: str) -> Optional[str]:
         with open(dumpfile, "wb") as out:
             # pass list args and explicit shell=False to avoid shell injection
             # cmd is a list derived from a libpq URL and a fixed program name; using shell=False
-            proc = subprocess.run(cmd, stdout=out, stderr=subprocess.PIPE)  # nosec: B603 - subprocess invoked with list args
+            proc = subprocess.run(
+                cmd, stdout=out, stderr=subprocess.PIPE
+            )  # nosec: B603 - subprocess invoked with list args
             if proc.returncode != 0:
                 logging.error(f"pg_dump failed: {proc.stderr.decode()}")
                 return None
@@ -205,7 +206,9 @@ def compute_table_checksum(
         try:
             iterator = result.yield_per(chunk)
         except Exception as e:
-            logging.exception("yield_per not supported, falling back to iterator: %s", e)
+            logging.exception(
+                "yield_per not supported, falling back to iterator: %s", e
+            )
             # fallback to plain iterator
             iterator = iter(result)
 
@@ -216,7 +219,9 @@ def compute_table_checksum(
                 try:
                     mapping = dict(row)
                 except Exception as e:
-                    logging.debug("Row to dict failed, falling back to positional mapping: %s", e)
+                    logging.debug(
+                        "Row to dict failed, falling back to positional mapping: %s", e
+                    )
                     mapping = {c.name: row[i] for i, c in enumerate(tbl.columns)}
 
             # per-row hash: MD5 over the concatenated column values (stable order)
@@ -324,7 +329,9 @@ def compute_table_checksum_postgres(
             res = conn.execute(sql).scalar()
             return res or ""
         except SQLAlchemyError as e:
-            logging.exception("Postgres checksum query failed for %s: %s", table_name, e)
+            logging.exception(
+                "Postgres checksum query failed for %s: %s", table_name, e
+            )
             return ""
 
 
@@ -429,7 +436,11 @@ def copy_table(
                                     mapping = dict(r)
                                 except (TypeError, ValueError) as e:
                                     # Fallback: enumerate positional values
-                                    logging.debug("Row to dict failed while writing sample for %s: %s", table_name, e)
+                                    logging.debug(
+                                        "Row to dict failed while writing sample for %s: %s",
+                                        table_name,
+                                        e,
+                                    )
                                     mapping = {h: r[i] for i, h in enumerate(header)}
                             w.writerow([mapping.get(h) for h in header])
                     else:
@@ -460,7 +471,11 @@ def copy_table(
                 try:
                     data = {c.name: row[i] for i, c in enumerate(src_table.columns)}
                 except Exception as e:
-                    logging.debug("Falling back to positional mapping for row in %s: %s", table_name, e)
+                    logging.debug(
+                        "Falling back to positional mapping for row in %s: %s",
+                        table_name,
+                        e,
+                    )
                     data = dict(row)
 
             # Build insert; prefer postgres ON CONFLICT DO NOTHING when available
@@ -482,7 +497,11 @@ def copy_table(
             try:
                 rc = res.rowcount if hasattr(res, "rowcount") else None
             except Exception as e:
-                logging.debug("Failed to obtain rowcount for insert result into %s: %s", table_name, e)
+                logging.debug(
+                    "Failed to obtain rowcount for insert result into %s: %s",
+                    table_name,
+                    e,
+                )
                 rc = None
 
             if rc is None:

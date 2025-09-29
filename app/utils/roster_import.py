@@ -76,12 +76,13 @@ def apply_roster(db_path, team_players, audit_info: dict | None = None):
     Returns summary dict with inserted/updated counts.
     """
     # Use SQLAlchemy ORM for data updates and audit
+    import logging
+
     from sqlalchemy import create_engine, func, text
+    from sqlalchemy.exc import SQLAlchemyError
     from sqlalchemy.orm import sessionmaker
 
     from app.models import ImportAudit
-    import logging
-    from sqlalchemy.exc import SQLAlchemyError
 
     engine = create_engine(f"sqlite:///{db_path}")
     Session = sessionmaker(bind=engine)
@@ -110,7 +111,9 @@ def apply_roster(db_path, team_players, audit_info: dict | None = None):
                     s.flush()
             except Exception as e:
                 # Be explicit about failures resolving/creating Team; continue with raw SQL path
-                logging.exception("Failed to resolve or create Team '%s': %s", team_name, e)
+                logging.exception(
+                    "Failed to resolve or create Team '%s': %s", team_name, e
+                )
                 team = None
 
             for p in players:
@@ -140,18 +143,34 @@ def apply_roster(db_path, team_players, audit_info: dict | None = None):
                     }
                     set_clause = ", ".join([f'"{k}" = :{k}' for k in updates.keys()])
                     # Validate that update columns exist in the giocatori table
-                    cur_cols = [r[1] for r in s.execute(text("PRAGMA table_info(giocatori)")).fetchall()]
+                    cur_cols = [
+                        r[1]
+                        for r in s.execute(
+                            text("PRAGMA table_info(giocatori)")
+                        ).fetchall()
+                    ]
                     for k in updates.keys():
                         if k not in cur_cols:
-                            raise ValueError(f"Unexpected column name for giocatori update: {k}")
+                            raise ValueError(
+                                f"Unexpected column name for giocatori update: {k}"
+                            )
 
                     params = {**updates, "rowid": rowid}
                     try:
                         # values are parameterized; identifiers were validated above
-                        s.execute(text("UPDATE giocatori SET " + set_clause + " WHERE rowid=:rowid"), params)  # nosec: B608 - identifiers validated, values parameterized
+                        s.execute(
+                            text(
+                                "UPDATE giocatori SET "
+                                + set_clause
+                                + " WHERE rowid=:rowid"
+                            ),
+                            params,
+                        )  # nosec: B608 - identifiers validated, values parameterized
                         updated += 1
                     except SQLAlchemyError as e:
-                        logging.exception("Failed to update giocatori rowid=%s: %s", rowid, e)
+                        logging.exception(
+                            "Failed to update giocatori rowid=%s: %s", rowid, e
+                        )
                         s.rollback()
                 else:
                     # insert new giocatori row using available columns
@@ -187,7 +206,9 @@ def apply_roster(db_path, team_players, audit_info: dict | None = None):
                             )
                             inserted += 1
                         except SQLAlchemyError as e:
-                            logging.exception("Failed to insert giocatori for %s: %s", nome, e)
+                            logging.exception(
+                                "Failed to insert giocatori for %s: %s", nome, e
+                            )
                             s.rollback()
 
         # update team cash balances using SQL to preserve fantateam semantics

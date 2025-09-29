@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from sqlalchemy import Boolean, Column, ForeignKey, Integer, String
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy.orm import DeclarativeMeta, declarative_base, relationship
 
-Base = declarative_base()
+Base: DeclarativeMeta = declarative_base()
 
 
 class Team(Base):

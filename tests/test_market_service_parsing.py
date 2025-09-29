@@ -1,4 +1,5 @@
 import sqlite3
+
 from app.services.market_service import MarketService
 
 
@@ -23,7 +24,10 @@ def test_prev_cost_parsing_from_db():
     conn = sqlite3.connect(":memory:")
     cur = conn.cursor()
     cur.execute("CREATE TABLE giocatori (squadra TEXT, FantaSquadra TEXT, Costo TEXT)")
-    cur.execute("INSERT INTO giocatori (squadra, FantaSquadra, Costo) VALUES (?, ?, ?)", ("A", "B", "12.5"))
+    cur.execute(
+        "INSERT INTO giocatori (squadra, FantaSquadra, Costo) VALUES (?, ?, ?)",
+        ("A", "B", "12.5"),
+    )
     conn.commit()
     # use _table_has_column to ensure FantaSquadra is visible
     assert svc._table_has_column(conn, "giocatori", "FantaSquadra")

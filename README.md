@@ -39,4 +39,3 @@ CI recommendation:
 
 - Ensure CI installs dependencies from `requirements.txt` in a clean environment.
 - Set the environment variable `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1` in the CI job that runs pytest. This prevents global site-packages plugins from being auto-loaded and breaking the test run.
-

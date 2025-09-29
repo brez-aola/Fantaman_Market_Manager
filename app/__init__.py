@@ -1,9 +1,9 @@
+import logging
 import os
 
 from flask import Flask
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-import logging
 
 
 def create_app(test_config=None):

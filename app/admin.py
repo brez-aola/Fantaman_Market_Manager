@@ -1,5 +1,5 @@
-import os
 import logging
+import os
 
 import sqlalchemy as sa
 from flask import (
@@ -306,7 +306,9 @@ def suggestions():
                     for r in reader:
                         csv_map[r.get("source_alias", "").strip()] = r
             except Exception as e:
-                logging.exception("Failed to load suggestions CSV for bulk approve: %s", e)
+                logging.exception(
+                    "Failed to load suggestions CSV for bulk approve: %s", e
+                )
                 csv_map = {}
 
             # insert into canonical_mappings avoiding duplicates
@@ -361,7 +363,9 @@ def suggestions():
                                 break
                 except Exception as e:
                     # best-effort single-approve insertion; log and continue
-                    logging.exception("Failed to insert single canonical mapping: %s", e)
+                    logging.exception(
+                        "Failed to insert single canonical mapping: %s", e
+                    )
             return redirect(url_for("admin.suggestions"))
 
     suggestions = []

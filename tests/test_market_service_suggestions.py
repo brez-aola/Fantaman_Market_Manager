@@ -1,4 +1,5 @@
 import sqlite3
+
 from app.services.market_service import MarketService
 
 
@@ -6,7 +7,10 @@ def test_get_name_suggestions_basic():
     svc = MarketService()
     conn = sqlite3.connect(":memory:")
     conn.execute("CREATE TABLE giocatori (Nome TEXT)")
-    conn.executemany("INSERT INTO giocatori (Nome) VALUES (?)", [("Mario",), ("Marco",), ("Mariano",)])
+    conn.executemany(
+        "INSERT INTO giocatori (Nome) VALUES (?)",
+        [("Mario",), ("Marco",), ("Mariano",)],
+    )
     conn.commit()
     res = svc.get_name_suggestions(conn, "Mar")
     # expect suggestions include names with Mar prefix

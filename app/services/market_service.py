@@ -1,6 +1,6 @@
-import sqlite3
 import logging
-from typing import Any, Dict, Optional
+import sqlite3
+from typing import Any, Dict, List, Optional
 
 
 class InsufficientFunds(Exception):
@@ -294,7 +294,9 @@ class MarketService:
                     (squadra_val, squadra_val, costo_val, anni_contratto, opzione, id),
                 )
             except sqlite3.OperationalError as e:
-                logging.debug("Update with full column set failed, retrying reduced sets: %s", e)
+                logging.debug(
+                    "Update with full column set failed, retrying reduced sets: %s", e
+                )
                 # First retry: drop anni_contratto if missing
                 try:
                     cur.execute(
@@ -452,9 +454,10 @@ class MarketService:
 
         This mirrors the lightweight suggestion SQL used in the legacy code.
         """
-        suggestions = []
+        suggestions: List[str] = []
         if not query or len(query) < 2:
             return suggestions
+
         try:
             cur = conn.cursor()
             suggestion_sql = (
@@ -470,10 +473,16 @@ class MarketService:
             params = query_variants + [limit]
             cur.execute(suggestion_sql, params)
             rows = cur.fetchall()
+
             # Normalize query for comparison so we don't return an exact case-insensitive match
             q_norm = query.strip().lower()
             for r in rows:
-                name = r[0]
+                # rows may be tuples or sqlite3.Row - handle both
+                if isinstance(r, (list, tuple)):
+                    name = r[0]
+                else:
+                    # sqlite3.Row supports indexing and key access
+                    name = r["Nome"] if "Nome" in r.keys() else r[0]
                 if not name:
                     continue
                 # skip exact case-insensitive match
@@ -484,6 +493,7 @@ class MarketService:
             # ProgrammingError may be raised if connection is closed; return safe empty suggestion list
             logging.debug("get_name_suggestions DB error or closed conn: %s", e)
             return []
+
         return suggestions
 
     def get_team_summaries(self, conn: sqlite3.Connection, squadre, rose_structure):
@@ -493,7 +503,7 @@ class MarketService:
         """
         cur = conn.cursor()
         has_fanta = self._table_has_column(conn, "giocatori", "FantaSquadra")
-        team_casse = []
+        team_casse: List[Dict] = []
         for s in squadre:
             cur.execute(
                 "SELECT cassa_iniziale, cassa_attuale FROM fantateam WHERE squadra=?",
@@ -556,7 +566,7 @@ class MarketService:
                 """,
                     (s,),
                 )
-            counts = {row[0]: row[1] for row in cur.fetchall()}
+            counts: Dict[str, int] = {row[0]: row[1] for row in cur.fetchall()}
             portieri_count = int(counts.get("P", 0)) + int(counts.get("G", 0))
             dif_count = int(counts.get("D", 0))
             cen_count = int(counts.get("C", 0))
@@ -594,7 +604,9 @@ class MarketService:
             "C": "Centrocampisti",
             "A": "Attaccanti",
         }
-        team_roster = {r: [] for r in rose_structure.keys()}
+        team_roster: Dict[str, List[Dict[str, Any]]] = {
+            r: [] for r in rose_structure.keys()
+        }
         cur = conn.cursor()
         has_fanta = self._table_has_column(conn, "giocatori", "FantaSquadra")
         if has_fanta:
