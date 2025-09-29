@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ player.name }} - Dettaglio Giocatore</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <img src="https://raw.githubusercontent.com/marketplaceimages/fantaman-logo.png" alt="Logo">
+            <span class="title">Fantaman</span>
+        </div>
+        <nav class="center">
+            <a href="/">Market Manager</a>
+            <a href="/rose">Rose Squadre</a>
+            <a href="/market">Market</a>
+        </nav>
+        <div class="account">
+            <img src="https://cdn-icons-png.flaticon.com/512/1077/1077012.png" alt="Account">
+        </div>
+    </header>
+
+    <div style="height:84px;"></div>
+    <div style="height:44px;"></div>
+
+    <div class="container">
+        <div class="breadcrumb" style="margin-bottom: 20px;">
+            <a href="/market">← Torna al Market</a>
+        </div>
+
+        <div class="player-detail" style="background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            <h1 style="margin-top: 0; color: #333;">{{ player.name }}</h1>
+
+            <div class="player-info-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 20px 0;">
+
+                <!-- Basic Info -->
+                <div class="info-card" style="background: #f8f9fa; padding: 15px; border-radius: 6px;">
+                    <h3 style="margin-top: 0;">Informazioni Base</h3>
+                    <div class="info-item">
+                        <strong>Ruolo:</strong>
+                        <span class="role-badge role-{{ player.role[0].lower() if player.role else 'unknown' }}">
+                            {{ player.role or 'N/A' }}
+                        </span>
+                    </div>
+                    <div class="info-item">
+                        <strong>Squadra Reale:</strong> {{ player.squadra or 'N/A' }}
+                    </div>
+                    <div class="info-item">
+                        <strong>Costo:</strong>
+                        {% if player.costo %}
+                        <span style="font-size: 18px; font-weight: bold; color: #2196f3;">{{ player.costo }}M</span>
+                        {% else %}
+                        <span style="color: #999;">N/A</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Team Assignment -->
+                <div class="info-card" style="background: #f8f9fa; padding: 15px; border-radius: 6px;">
+                    <h3 style="margin-top: 0;">Assegnazione</h3>
+                    {% if player.team_id and player.team %}
+                    <div class="info-item">
+                        <strong>Team Fantacalcio:</strong>
+                        <span style="color: #4caf50; font-weight: bold;">{{ player.team.name }}</span>
+                    </div>
+                    {% if player.opzione %}
+                    <div class="info-item">
+                        <strong>Opzione:</strong>
+                        <span style="color: #ff9800;">Sì</span>
+                    </div>
+                    {% endif %}
+                    {% if player.anni_contratto %}
+                    <div class="info-item">
+                        <strong>Anni Contratto:</strong> {{ player.anni_contratto }}
+                    </div>
+                    {% endif %}
+                    {% else %}
+                    <div class="info-item">
+                        <strong>Stato:</strong>
+                        <span style="color: #ff9800; font-weight: bold;">Svincolato</span>
+                    </div>
+                    {% endif %}
+                </div>
+
+                <!-- Additional Info -->
+                {% if player.id %}
+                <div class="info-card" style="background: #f8f9fa; padding: 15px; border-radius: 6px;">
+                    <h3 style="margin-top: 0;">Dettagli Tecnici</h3>
+                    <div class="info-item">
+                        <strong>ID:</strong> {{ player.id }}
+                    </div>
+                    {% if hasattr(player, 'created_at') and player.created_at %}
+                    <div class="info-item">
+                        <strong>Aggiunto:</strong> {{ player.created_at.strftime('%d/%m/%Y') }}
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Actions -->
+            <div class="actions" style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+                {% if not player.team_id %}
+                <h3>Azioni Disponibili</h3>
+                <button class="assign-btn" data-id="{{ player.id }}" data-name="{{ player.name }}"
+                        style="padding: 10px 20px; background: #4caf50; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                    Assegna a Team
+                </button>
+                {% else %}
+                <h3>Azioni Disponibili</h3>
+                <button class="unassign-btn" data-id="{{ player.id }}" data-name="{{ player.name }}"
+                        style="padding: 10px 20px; background: #ff9800; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                    Svincola dal Team
+                </button>
+                {% endif %}
+
+                <a href="/market" style="padding: 10px 20px; background: #2196f3; color: white; text-decoration: none; border-radius: 4px;">
+                    Torna alla Ricerca
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Assignment Popup -->
+    {% if not player.team_id %}
+    <div id="assignPopup" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.4); z-index:1000;">
+        <div style="background:#fff; padding:30px; max-width:400px; margin:80px auto; border-radius:8px; position:relative;">
+            <h2>Assegna {{ player.name }}</h2>
+            <form id="assignForm" method="post" action="/market/assign" onsubmit="return submitAssignForm();">
+                <input type="hidden" name="player_id" value="{{ player.id }}">
+                <div style="margin-top:10px;">
+                    <label>Squadra:</label>
+                    <select name="team" required>
+                        <option value="">Seleziona...</option>
+                        {% for team in teams %}
+                        <option value="{{ team.name }}">{{ team.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div style="margin-top:20px;">
+                    <button type="submit">Assegna</button>
+                    <button type="button" onclick="closeAssignPopup()">Annulla</button>
+                </div>
+                <div id="assignError" role="alert" style="color:#8a1f11; background:#fee; padding:8px; margin-top:12px; display:none; border:1px solid #f5c2c2; border-radius:4px;"></div>
+            </form>
+            <button style="position:absolute; top:10px; right:10px;" onclick="closeAssignPopup()">&times;</button>
+        </div>
+    </div>
+    {% endif %}
+
+    <script>
+        function openAssignPopup() {
+            document.getElementById('assignPopup').style.display = 'block';
+            document.getElementById('assignError').style.display = 'none';
+        }
+
+        function closeAssignPopup() {
+            document.getElementById('assignPopup').style.display = 'none';
+        }
+
+        function submitAssignForm() {
+            const form = document.getElementById('assignForm');
+            const formData = new FormData(form);
+
+            fetch('/market/assign', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    const errorDiv = document.getElementById('assignError');
+                    errorDiv.textContent = data.error || 'Errore durante l\'assegnazione';
+                    errorDiv.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                const errorDiv = document.getElementById('assignError');
+                errorDiv.textContent = 'Errore di rete: ' + error.message;
+                errorDiv.style.display = 'block';
+            });
+
+            return false;
+        }
+
+        function unassignPlayer(playerId, playerName) {
+            if (confirm(`Vuoi svincolari ${playerName}?`)) {
+                const formData = new FormData();
+                formData.append('player_id', playerId);
+
+                fetch('/market/unassign', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                        location.reload();
+                    } else {
+                        alert(data.error || 'Errore durante lo svincolamento');
+                    }
+                })
+                .catch(error => {
+                    alert('Errore di rete: ' + error.message);
+                });
+            }
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            const assignBtn = document.querySelector('.assign-btn');
+            if (assignBtn) {
+                assignBtn.addEventListener('click', function() {
+                    openAssignPopup();
+                });
+            }
+
+            const unassignBtn = document.querySelector('.unassign-btn');
+            if (unassignBtn) {
+                unassignBtn.addEventListener('click', function() {
+                    const playerId = this.getAttribute('data-id');
+                    const playerName = this.getAttribute('data-name');
+                    unassignPlayer(playerId, playerName);
+                });
+            }
+
+            // Close popup on background click
+            const assignPopup = document.getElementById('assignPopup');
+            if (assignPopup) {
+                assignPopup.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        closeAssignPopup();
+                    }
+                });
+            }
+        });
+    </script>
+
+    <style>
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .info-item {
+            margin: 8px 0;
+        }
+
+        .role-badge {
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 0.9em;
+            font-weight: bold;
+        }
+
+        .role-badge.role-p { background: #e3f2fd; color: #1976d2; }
+        .role-badge.role-d { background: #e8f5e8; color: #388e3c; }
+        .role-badge.role-c { background: #fff3e0; color: #f57c00; }
+        .role-badge.role-a { background: #fce4ec; color: #c2185b; }
+
+        .breadcrumb a {
+            color: #2196f3;
+            text-decoration: none;
+        }
+
+        .breadcrumb a:hover {
+            text-decoration: underline;
+        }
+
+        button {
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+    </style>
+</body>
+</html>

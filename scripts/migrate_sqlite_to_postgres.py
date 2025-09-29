@@ -292,7 +292,7 @@ def compute_table_checksum_postgres(
         # ARRAY: sort elements and join to stable text representation
         elif isinstance(col.type, ARRAY):
             # unnest the array, order elements, aggregate back to text
-            expr = f"coalesce((SELECT array_to_string(array_agg(e ORDER BY e), '|' ) FROM unnest({name}) e), '')"
+            expr = f"coalesce((SELECT array_to_string(array_agg(e ORDER BY e), '|' ) FROM unnest({name}) e), '')"  # nosec: B608 - name is validated column identifier
         else:
             expr = f"coalesce({name}::text, '')"
 

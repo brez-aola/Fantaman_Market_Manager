@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Market - Fantaman Market Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <img src="https://raw.githubusercontent.com/marketplaceimages/fantaman-logo.png" alt="Logo">
+            <span class="title">Fantaman</span>
+        </div>
+        <nav class="center">
+            <a href="/">Market Manager</a>
+            <a href="/rose">Rose Squadre</a>
+            <a href="/market">Market</a>
+        </nav>
+        <div class="account">
+            <img src="https://cdn-icons-png.flaticon.com/512/1077/1077012.png" alt="Account">
+        </div>
+    </header>
+
+    {% if squadre %}
+    <div id="team-bar">
+        {% for squadra in squadre %}
+        <a class="team-link" href="/squadra/{{ squadra|urlencode }}">
+            <span>{{ squadra }}</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div style="height:84px;"></div>
+    <div style="height:44px;"></div>
+
+    <div class="container">
+        <h1 style="margin-top:0px;">Market - Player Search</h1>
+
+        {% if error %}
+        <div class="alert alert-error">
+            <strong>Errore:</strong> {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- Market Statistics -->
+        {% if market_stats %}
+        <div class="market-stats" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+            <h3>Statistiche Mercato</h3>
+            <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+                {% if market_stats.role_distribution %}
+                <div>
+                    <strong>Distribuzione Ruoli:</strong>
+                    {% for role, count in market_stats.role_distribution.items() %}
+                    <span class="role-badge role-{{ role.lower() }}" style="margin-left: 5px;">{{ role }}: {{ count }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% if market_stats.total_players %}
+                <div><strong>Totale Giocatori:</strong> {{ market_stats.total_players }}</div>
+                {% endif %}
+                {% if market_stats.free_agents %}
+                <div><strong>Svincolati:</strong> {{ market_stats.free_agents }}</div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Search and Filter Form -->
+        <form method="get" class="search-form" style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+            <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px;">
+                <input type="text" name="q" placeholder="Cerca giocatore..." value="{{ query }}" style="flex: 1; min-width: 200px;">
+
+                <select name="squadra" style="min-width: 150px;">
+                    <option value="">Tutte le squadre</option>
+                    {% for team_name in team_names %}
+                    <option value="{{ team_name }}" {% if squadra == team_name %}selected{% endif %}>{{ team_name }}</option>
+                    {% endfor %}
+                </select>
+
+                <input type="number" name="costo_min" placeholder="Costo min" value="{{ costo_min }}" style="width: 100px;">
+                <input type="number" name="costo_max" placeholder="Costo max" value="{{ costo_max }}" style="width: 100px;">
+
+                <button type="submit">Cerca</button>
+            </div>
+
+            <!-- Role filters -->
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <strong>Ruoli:</strong>
+                {% for role_name, role_codes in role_map.items() %}
+                <label style="display: flex; align-items: center; gap: 5px;">
+                    <input type="checkbox" name="roles" value="{{ role_name }}"
+                           {% if role_name in roles_selected %}checked{% endif %}>
+                    {{ role_name }}
+                </label>
+                {% endfor %}
+            </div>
+        </form>
+
+        <!-- Results -->
+        {% if giocatori %}
+        <div class="results-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3>{{ total_count }} giocatori trovati</h3>
+
+            <!-- Pagination info -->
+            {% if total_pages > 1 %}
+            <div class="pagination-info">
+                Pagina {{ current_page }} di {{ total_pages }}
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Players Table -->
+        <div id="players-table">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Ruolo</th>
+                        <th>Squadra</th>
+                        <th>Costo</th>
+                        <th>Team Fantacalcio</th>
+                        <th>Azioni</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for player in giocatori %}
+                    <tr data-player-id="{{ player.id }}">
+                        <td><strong>{{ player.name }}</strong></td>
+                        <td>
+                            <span class="role-badge role-{{ player.role[0].lower() if player.role else 'unknown' }}">
+                                {{ player.role or 'N/A' }}
+                            </span>
+                        </td>
+                        <td>{{ player.squadra or 'N/A' }}</td>
+                        <td>{{ player.costo if player.costo else 'N/A' }}</td>
+                        <td>
+                            {% if player.team_id %}
+                                <span class="team-assigned">{{ player.team.name if player.team else 'Assigned' }}</span>
+                            {% else %}
+                                <span class="team-free">Svincolato</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if not player.team_id %}
+                            <button class="assign-btn" data-id="{{ player.id }}" data-name="{{ player.name }}">
+                                Assegna
+                            </button>
+                            {% else %}
+                            <button class="unassign-btn" data-id="{{ player.id }}" data-name="{{ player.name }}">
+                                Svincola
+                            </button>
+                            {% endif %}
+                            <a href="/market/player/{{ player.id }}" class="detail-btn">Dettagli</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="pagination" style="margin-top: 20px; text-align: center;">
+            {% if has_prev %}
+            <a href="{{ request.path }}?{{ request.query_string.decode().replace('page=' + current_page|string, 'page=' + (current_page-1)|string) if 'page=' in request.query_string.decode() else (request.query_string.decode() + '&page=' + (current_page-1)|string) if request.query_string.decode() else 'page=' + (current_page-1)|string }}" class="pagination-btn">← Precedente</a>
+            {% endif %}
+
+            <span class="pagination-info">{{ current_page }} / {{ total_pages }}</span>
+
+            {% if has_next %}
+            <a href="{{ request.path }}?{{ request.query_string.decode().replace('page=' + current_page|string, 'page=' + (current_page+1)|string) if 'page=' in request.query_string.decode() else (request.query_string.decode() + '&page=' + (current_page+1)|string) if request.query_string.decode() else 'page=' + (current_page+1)|string }}" class="pagination-btn">Successiva →</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% elif query %}
+        <div class="no-results">
+            <p>Nessun giocatore trovato per "<strong>{{ query }}</strong>".</p>
+        </div>
+        {% endif %}
+
+        <!-- Quick Links -->
+        <div class="quick-links" style="margin-top: 30px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+            <h4>Link Rapidi</h4>
+            <a href="/market/free-agents" class="btn">Visualizza Svincolati</a>
+            <a href="/market/statistics" class="btn">Statistiche Dettagliate</a>
+        </div>
+    </div>
+
+    <!-- Assignment Popup -->
+    <div id="assignPopup" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.4); z-index:1000;">
+        <div style="background:#fff; padding:30px; max-width:400px; margin:80px auto; border-radius:8px; position:relative;">
+            <h2>Assegna giocatore</h2>
+            <form id="assignForm" method="post" action="/market/assign" onsubmit="return submitAssignForm();">
+                <input type="hidden" name="player_id" id="assign_id">
+                <div><b>Nome:</b> <span id="assign_nome"></span></div>
+                <div style="margin-top:10px;">
+                    <label>Squadra:</label>
+                    <select name="team" required>
+                        <option value="">Seleziona...</option>
+                        {% if squadre %}
+                            {% for s in squadre %}
+                            <option value="{{ s }}">{{ s }}</option>
+                            {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+                <div style="margin-top:20px;">
+                    <button type="submit">Assegna</button>
+                    <button type="button" onclick="closeAssignPopup()">Annulla</button>
+                </div>
+                <div id="assignError" role="alert" style="color:#8a1f11; background:#fee; padding:8px; margin-top:12px; display:none; border:1px solid #f5c2c2; border-radius:4px;"></div>
+            </form>
+            <button style="position:absolute; top:10px; right:10px;" onclick="closeAssignPopup()">&times;</button>
+        </div>
+    </div>
+
+    <script>
+        // Assignment popup functionality
+        function openAssignPopup(playerId, playerName) {
+            document.getElementById('assign_id').value = playerId;
+            document.getElementById('assign_nome').textContent = playerName;
+            document.getElementById('assignPopup').style.display = 'block';
+            document.getElementById('assignError').style.display = 'none';
+        }
+
+        function closeAssignPopup() {
+            document.getElementById('assignPopup').style.display = 'none';
+        }
+
+        function submitAssignForm() {
+            const form = document.getElementById('assignForm');
+            const formData = new FormData(form);
+
+            fetch('/market/assign', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    location.reload();
+                } else {
+                    const errorDiv = document.getElementById('assignError');
+                    errorDiv.textContent = data.error || 'Errore durante l\'assegnazione';
+                    errorDiv.style.display = 'block';
+                }
+            })
+            .catch(error => {
+                const errorDiv = document.getElementById('assignError');
+                errorDiv.textContent = 'Errore di rete: ' + error.message;
+                errorDiv.style.display = 'block';
+            });
+
+            return false; // Prevent form submission
+        }
+
+        // Unassign functionality
+        function unassignPlayer(playerId, playerName) {
+            if (confirm(`Vuoi svincolari ${playerName}?`)) {
+                const formData = new FormData();
+                formData.append('player_id', playerId);
+
+                fetch('/market/unassign', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(data.message);
+                        location.reload();
+                    } else {
+                        alert(data.error || 'Errore durante lo svincolamento');
+                    }
+                })
+                .catch(error => {
+                    alert('Errore di rete: ' + error.message);
+                });
+            }
+        }
+
+        // Event listeners
+        document.addEventListener('DOMContentLoaded', function() {
+            // Assign buttons
+            document.querySelectorAll('.assign-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const playerId = this.getAttribute('data-id');
+                    const playerName = this.getAttribute('data-name');
+                    openAssignPopup(playerId, playerName);
+                });
+            });
+
+            // Unassign buttons
+            document.querySelectorAll('.unassign-btn').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const playerId = this.getAttribute('data-id');
+                    const playerName = this.getAttribute('data-name');
+                    unassignPlayer(playerId, playerName);
+                });
+            });
+
+            // Close popup on background click
+            document.getElementById('assignPopup').addEventListener('click', function(e) {
+                if (e.target === this) {
+                    closeAssignPopup();
+                }
+            });
+        });
+    </script>
+
+    <style>
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .search-form {
+            display: block;
+        }
+
+        .role-badge {
+            padding: 2px 6px;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: bold;
+        }
+
+        .role-badge.role-p { background: #e3f2fd; color: #1976d2; }
+        .role-badge.role-d { background: #e8f5e8; color: #388e3c; }
+        .role-badge.role-c { background: #fff3e0; color: #f57c00; }
+        .role-badge.role-a { background: #fce4ec; color: #c2185b; }
+
+        .team-assigned {
+            color: #388e3c;
+            font-weight: bold;
+        }
+
+        .team-free {
+            color: #f57c00;
+            font-style: italic;
+        }
+
+        .assign-btn, .unassign-btn, .detail-btn {
+            padding: 4px 8px;
+            margin: 2px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+
+        .assign-btn {
+            background: #4caf50;
+            color: white;
+        }
+
+        .unassign-btn {
+            background: #ff9800;
+            color: white;
+        }
+
+        .detail-btn {
+            background: #2196f3;
+            color: white;
+            text-decoration: none;
+        }
+
+        .pagination-btn {
+            padding: 8px 16px;
+            margin: 0 5px;
+            background: #2196f3;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+        }
+
+        .pagination-info {
+            margin: 0 10px;
+            font-weight: bold;
+        }
+
+        .alert {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+
+        .alert-error {
+            background: #fee;
+            color: #8a1f11;
+            border: 1px solid #f5c2c2;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            margin: 5px;
+            background: #2196f3;
+            color: white;
+            text-decoration: none;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        th, td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+
+        th {
+            background-color: #f5f5f5;
+            font-weight: bold;
+        }
+
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+    </style>
+</body>
+</html>

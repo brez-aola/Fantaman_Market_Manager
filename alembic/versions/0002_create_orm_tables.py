@@ -30,7 +30,7 @@ def upgrade():
         sa.Column("role", sa.String(length=64), nullable=True),
         sa.Column("team_id", sa.Integer(), sa.ForeignKey("teams.id"), nullable=True),
         sa.Column(
-            "is_injured", sa.Boolean(), nullable=False, server_default=sa.text("0")
+            "is_injured", sa.Boolean(), nullable=False, server_default=sa.text("FALSE")
         ),
     )
 
