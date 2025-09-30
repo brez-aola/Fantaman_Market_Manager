@@ -1,9 +1,9 @@
-import urllib.parse
 import logging
 import sqlite3
-from sqlalchemy.exc import SQLAlchemyError
+import urllib.parse
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.db import get_connection
 from app.services.market_service import MarketService

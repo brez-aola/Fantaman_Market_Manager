@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Errore - Fantaman Market Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <img src="https://raw.githubusercontent.com/marketplaceimages/fantaman-logo.png" alt="Logo">
+            <span class="title">Fantaman</span>
+        </div>
+        <nav class="center">
+            <a href="/">Market Manager</a>
+            <a href="/rose">Rose Squadre</a>
+            <a href="/market">Market</a>
+        </nav>
+        <div class="account">
+            <img src="https://cdn-icons-png.flaticon.com/512/1077/1077012.png" alt="Account">
+        </div>
+    </header>
+
+    <div style="height:84px;"></div>
+    <div style="height:44px;"></div>
+
+    <div class="container">
+        <div class="error-page" style="text-align: center; padding: 40px;">
+            <h1 style="color: #e74c3c; margin-bottom: 20px;">⚠️ Errore</h1>
+
+            {% if message %}
+            <div class="error-message" style="background: #fee; border: 1px solid #f5c2c2; color: #8a1f11; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p style="font-size: 18px; margin: 0;">{{ message }}</p>
+            </div>
+            {% else %}
+            <div class="error-message" style="background: #fee; border: 1px solid #f5c2c2; color: #8a1f11; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                <p style="font-size: 18px; margin: 0;">Si è verificato un errore imprevisto.</p>
+            </div>
+            {% endif %}
+
+            <div class="actions" style="margin-top: 30px;">
+                <a href="/market" class="btn" style="padding: 10px 20px; background: #2196f3; color: white; text-decoration: none; border-radius: 4px; margin: 5px;">
+                    🔙 Torna al Market
+                </a>
+                <a href="/" class="btn" style="padding: 10px 20px; background: #4caf50; color: white; text-decoration: none; border-radius: 4px; margin: 5px;">
+                    🏠 Home
+                </a>
+            </div>
+
+            <div class="help-text" style="margin-top: 30px; color: #666; font-size: 14px;">
+                <p>Se il problema persiste, contatta l'amministratore del sistema.</p>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        .btn {
+            display: inline-block;
+            text-decoration: none;
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+        }
+    </style>
+</body>
+</html>

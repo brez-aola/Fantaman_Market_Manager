@@ -1,0 +1,2 @@
+table,source_rows,inserted,skipped,src_count,tgt_count,count_match,src_checksum,tgt_checksum,checksum_match
+canonical_mappings,1,0,1,1,1,True,0248014cfe0e9cde697d019bbcf2e6eae0e3db68141551b616c06397e65a086e,1a904321bc5abad4bdc62a6102b6c233fb11575ee2dde1e37387b57b5c6cf087,False

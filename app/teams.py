@@ -1,8 +1,9 @@
+import logging
+
 from flask import Blueprint, current_app, render_template
 
 from app.db import get_connection
 from app.services.market_service import MarketService
-import logging
 
 bp = Blueprint("teams", __name__, url_prefix="/teams")
 
@@ -90,7 +91,9 @@ def team_page(team_name):
                     try:
                         session.close()
                     except Exception as e2:
-                        logging.debug("Failed to close session during teams fallback: %s", e2)
+                        logging.debug(
+                            "Failed to close session during teams fallback: %s", e2
+                        )
                     logging.debug("ORM teams check triggered fallback: %s", e)
                     raise
 

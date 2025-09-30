@@ -25,8 +25,14 @@ if PROJECT_ROOT not in sys.path:
 # Import models' MetaData for 'autogenerate' support
 try:
     from app.models import Base  # noqa: E402
+    from app.config import settings  # noqa: E402
 
     target_metadata = Base.metadata
+
+    # Use DATABASE_URL from settings if not provided in config
+    if not config.get_main_option("sqlalchemy.url"):
+        config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
 except Exception as exc:  # pragma: no cover - runtime environment
     logger.exception("Failed importing app.models for alembic autogenerate: %s", exc)
     target_metadata = None

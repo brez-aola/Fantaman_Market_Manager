@@ -18,10 +18,17 @@ depends_on = None
 
 def table_exists(tablename):
     conn = op.get_bind()
-    res = conn.execute(
-        sa.text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
-        {"t": tablename},
-    ).fetchone()
+    # Check database type and use appropriate query
+    if conn.dialect.name == 'postgresql':
+        res = conn.execute(
+            sa.text("SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename=:t"),
+            {"t": tablename},
+        ).fetchone()
+    else:  # SQLite
+        res = conn.execute(
+            sa.text("SELECT name FROM sqlite_master WHERE type='table' AND name=:t"),
+            {"t": tablename},
+        ).fetchone()
     return bool(res)
 
 

@@ -1,9 +1,10 @@
+import logging
 import sys
 from pathlib import Path
+from sqlite3 import DatabaseError
+from typing import Any, Dict, List
 
 from openpyxl import load_workbook
-import logging
-from sqlite3 import DatabaseError
 
 from app.db import get_connection
 
@@ -50,7 +51,7 @@ for s in team_starts:
     print(" ", s)
 
 # For each team, read columns start..start+3 and rows from row index 5 onward (0-based index 5 = sheet row 6)
-team_players = {name: [] for (_, name) in team_starts}
+team_players: Dict[str, List[Dict[str, Any]]] = {name: [] for (_, name) in team_starts}
 start_cols = [s for (s, _) in team_starts]
 start_cols_sorted = sorted(start_cols)
 
@@ -76,7 +77,11 @@ for r in rows[5:]:
                     # sometimes cost may be like '1 ' or with comma
                     c = float(str(costo).replace(",", ".").strip())
                 except Exception as e2:
-                    logging.debug("Failed to parse costo with comma replacement for %s: %s", costo, e2)
+                    logging.debug(
+                        "Failed to parse costo with comma replacement for %s: %s",
+                        costo,
+                        e2,
+                    )
                     c = 0.0
             team_players[tname].append(
                 {
@@ -142,14 +147,18 @@ for team, players in team_players.items():
             # validate that update columns exist in the table (avoid SQL injection via identifier)
             for k in updates.keys():
                 if k not in cols:
-                    raise ValueError(f"Unexpected column name for giocatori update: {k}")
+                    raise ValueError(
+                        f"Unexpected column name for giocatori update: {k}"
+                    )
 
             set_clause = ", ".join([f'"{k}" = ?' for k in updates.keys()])
             params = list(updates.values()) + [rowid]
             try:
                 # Using parameter placeholders for values and validated column names for identifiers
                 # `set_clause` components were validated against `cols` above; parameterized values are used
-                cur.execute("UPDATE giocatori SET " + set_clause + " WHERE rowid=?", params)  # nosec: B608 - identifiers validated, values parameterized
+                cur.execute(
+                    "UPDATE giocatori SET " + set_clause + " WHERE rowid=?", params
+                )  # nosec: B608 - identifiers validated, values parameterized
                 updated += 1
             except DatabaseError as e:
                 logging.exception("Failed to update %s: %s", nome, e)
@@ -239,11 +248,11 @@ try:
 
     engine = create_engine(f"sqlite:///{DB}")
     Session = sessionmaker(bind=engine)
-    s = Session()
+    session = Session()
     try:
-        created = populate_team_aliases(s, source="fantateam")
+        created = populate_team_aliases(session, source="fantateam")
         print("Created aliases:", len(created))
     finally:
-        s.close()
+        session.close()
 except Exception as e:
     logging.exception("Failed to populate aliases: %s", e)
